@@ -1,16 +1,7 @@
-# Core ML libraries
-torch>=2.0.0,<2.5.0
-torchvision>=0.15.0,<0.20.0
-numpy>=1.24.0,<2.0.0
-
-# Streamlit and visualization
-streamlit>=1.28.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-pillow>=10.0.0
-
-# QR Code generation
-qrcode[pil]>=7.4.2
-
-# Utilities
-requests>=2.32.0
+streamlit>=1.32
+torch==2.4.1
+torchvision==0.19.1
+Pillow
+matplotlib
+seaborn
+qrcode
