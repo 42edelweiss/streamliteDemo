@@ -413,11 +413,11 @@ def show_home():
     
     ### 📊 Dataset
     
-    **PKLot Dataset** - Ensemble complet d'images de stationnement avec:
-    - Images de multiples stationnements
-    - Différentes conditions météorologiques
+    **Action-Camera Parking Dataset (GoPro Hero 6)** - Images de stationnement capturées en hauteur:
+    - Images capturées à ~10 mètres de hauteur
+    - Caméra GoPro Hero 6
     - 2 classes: Libre et Occupé
-    - Plus de 12,000 images annotées
+    - 293 images avec annotations de régions d'intérêt (ROIs)
     
     ### 🚀 Comment Utiliser
     
@@ -471,9 +471,9 @@ def show_home():
         - Visualisation: Matplotlib, Seaborn, PIL
         
         **Équipe - GIF-4101:**
-        - **Salem N. Nyisingize** (Créateur - MobileNetV3)
+        - **Salem N. Nyisingize** (Créateur - MobileNetV3-Small)
         - Félix Légaré (ResNet18)
-        - Rayane / GameScopeX5 (EfficientNet-B0)
+        - Rayan Nadeau (EfficientNet-B0)
         
         **Université Laval - Automne 2025**
         
@@ -786,10 +786,10 @@ def show_statistics():
     st.title("📈 Statistiques du Dataset")
     
     st.markdown("""
-    ### Dataset PKLot
+    ### Dataset Action-Camera Parking (GoPro Hero 6)
     
     Statistiques détaillées sur l'ensemble de données utilisé pour l'entraînement 
-    et l'évaluation du modèle.
+    et l'évaluation du modèle. Images capturées à ~10 mètres de hauteur avec GoPro Hero 6.
     """)
     
     # Statistiques générales
@@ -879,10 +879,11 @@ def show_statistics():
     with col2:
         st.markdown("""
         **Conditions de Capture:**
-        - Ensoleillé, nuageux, pluvieux
-        - Multiples stationnements (UFPR, PUC)
-        - Vue aérienne
-        - Différents moments de la journée
+        - Caméra: GoPro Hero 6
+        - Hauteur: ~10 mètres
+        - Vue aérienne de parkings
+        - Annotations: Régions d'intérêt (ROIs)
+        - Format: Coordonnées normalisées (0-1)
         """)
 
 def show_about_team():
@@ -943,23 +944,76 @@ def show_about_team():
         **Contribution:** Modèle ResNet18
         
         **Résultats:**
-        - Architecture: ResNet18
-        - Performance: ~96% accuracy (en cours)
-        - Spécialisation: Architecture résiduelle profonde
+        - Test Accuracy: **94.97%**
+        - Validation Accuracy: **95.85%**
+        - Best Epoch: 9
+        - **Le plus rapide:** 208 FPS! 🚀
         """)
         
         with st.expander("📊 Métriques ResNet18"):
-            st.info("Entraînement en cours - Résultats détaillés à venir")
+            st.markdown("### Performance")
+            col_res1, col_res2, col_res3 = st.columns(3)
+            with col_res1:
+                st.metric("Test Acc", "94.97%")
+            with col_res2:
+                st.metric("Val Acc", "95.85%")
+            with col_res3:
+                st.metric("Best Epoch", "9")
+            
+            st.markdown("### Vitesse d'Inférence ⚡")
+            col_speed1, col_speed2, col_speed3 = st.columns(3)
+            with col_speed1:
+                st.metric("Temps Moyen", "4.81 ms", "🔥 Le plus rapide!")
+            with col_speed2:
+                st.metric("FPS", "208.07", "🚀 Record!")
+            with col_speed3:
+                st.metric("Médiane", "4.71 ms")
+            
+            st.success("⚡ ResNet18 est le modèle le PLUS RAPIDE avec 208 FPS!")
+            
+            st.markdown("### Modèle")
+            col_model1, col_model2, col_model3 = st.columns(3)
+            with col_model1:
+                st.metric("Taille", "42.71 MB")
+            with col_model2:
+                st.metric("Paramètres", "11.18M")
+            with col_model3:
+                st.metric("Device", "CUDA")
+            
+            st.markdown("### Détails Vitesse")
+            st.write(f"**Écart-type:** 0.37 ms")
+            st.write(f"**Min:** 4.33 ms")
+            st.write(f"**Max:** 7.68 ms")
+            
+            st.markdown("### Matrice de Confusion")
+            confusion_res = np.array([[855, 30], [45, 560]])
+            fig, ax = plt.subplots(figsize=(6, 4))
+            sns.heatmap(confusion_res, annot=True, fmt='d', cmap='Greens',
+                       xticklabels=["Libre", "Occupé"], 
+                       yticklabels=["Libre", "Occupé"], ax=ax)
+            ax.set_xlabel('Prédiction')
+            ax.set_ylabel('Vraie Classe')
+            ax.set_title('ResNet18 - Matrice de Confusion')
+            st.pyplot(fig)
+            
+            st.markdown("""
+            **Statistiques:**
+            - Total d'échantillons: 1,490
+            - Prédictions correctes: 1,415
+            - Prédictions incorrectes: 75
+            - Faux positifs: 30
+            - Faux négatifs: 45
+            """)
     
     with col2:
-        st.markdown("### Rayane (GameScopeX5)")
-        st.markdown("**EfficientNet-B0**")
+        st.markdown("### Rayan Nadeau")
+        st.markdown("**GameScopeX5**")
         st.markdown("""
         **Contribution:** Modèle EfficientNet-B0
         
         **Résultats:**
         - Test Accuracy: **96.98%**
-        - Validation Accuracy: **98.06%**
+        - Validation Accuracy: **98.06%** (La meilleure!)
         - Best Epoch: 5
         """)
         
@@ -969,9 +1023,11 @@ def show_about_team():
             with col_eff1:
                 st.metric("Test Acc", "96.98%")
             with col_eff2:
-                st.metric("Val Acc", "98.06%")
+                st.metric("Val Acc", "98.06%", "🏆 La meilleure!")
             with col_eff3:
                 st.metric("Best Epoch", "5")
+            
+            st.success("🏆 EfficientNet a la MEILLEURE validation accuracy!")
             
             st.markdown("### Vitesse d'Inférence")
             col_speed1, col_speed2, col_speed3 = st.columns(3)
@@ -1016,15 +1072,38 @@ def show_about_team():
     
     comparison_data = {
         "Modèle": ["MobileNetV3-Small", "EfficientNet-B0", "ResNet18"],
-        "Test Accuracy (%)": [97.79, 96.98, "~96"],
-        "Val Accuracy (%)": [97.85, 98.06, "En cours"],
-        "Taille (MB)": [2.54, 15.59, "~"],
-        "FPS": [56, 36.53, "~"],
-        "Temps (ms)": [17.94, 27.37, "~"],
-        "Paramètres (M)": [1.52, 4.01, "~"]
+        "Test Accuracy (%)": [97.79, 96.98, 94.97],
+        "Val Accuracy (%)": [97.85, 98.06, 95.85],
+        "Taille (MB)": [2.54, 15.59, 42.71],
+        "FPS": [56, 36.53, 208.07],
+        "Temps (ms)": [17.94, 27.37, 4.81],
+        "Paramètres (M)": [1.52, 4.01, 11.18]
     }
     
     st.dataframe(comparison_data, use_container_width=True)
+    
+    # Points forts de chaque modèle
+    st.markdown("### 🏆 Points Forts")
+    
+    col_strong1, col_strong2, col_strong3 = st.columns(3)
+    
+    with col_strong1:
+        st.success("**MobileNetV3-Small**")
+        st.write("🏆 Meilleur test accuracy (97.79%)")
+        st.write("⚡ Le plus léger (2.54 MB)")
+        st.write("📱 Idéal pour mobile")
+    
+    with col_strong2:
+        st.info("**EfficientNet-B0**")
+        st.write("🏆 Meilleure val accuracy (98.06%)")
+        st.write("⚖️ Bon équilibre taille/perf")
+        st.write("🎯 Moins d'erreurs (45)")
+    
+    with col_strong3:
+        st.warning("**ResNet18**")
+        st.write("🏆 LE PLUS RAPIDE (208 FPS!)")
+        st.write("⚡ Seulement 4.81 ms/image")
+        st.write("🚀 Idéal pour temps réel")
     
     # Graphique de comparaison
     st.markdown("### 📈 Comparaison Visuelle")
@@ -1034,22 +1113,22 @@ def show_about_team():
     with col_comp1:
         # Accuracy comparison
         fig, ax = plt.subplots(figsize=(8, 5))
-        models = ["MobileNetV3", "EfficientNet-B0"]
-        test_acc = [97.79, 96.98]
-        val_acc = [97.85, 98.06]
+        models = ["MobileNetV3", "EfficientNet-B0", "ResNet18"]
+        test_acc = [97.79, 96.98, 94.97]
+        val_acc = [97.85, 98.06, 95.85]
         
         x = np.arange(len(models))
         width = 0.35
         
-        ax.bar(x - width/2, test_acc, width, label='Test Accuracy', alpha=0.8)
-        ax.bar(x + width/2, val_acc, width, label='Validation Accuracy', alpha=0.8)
+        ax.bar(x - width/2, test_acc, width, label='Test Accuracy', alpha=0.8, color=['#2ecc71', '#3498db', '#e74c3c'])
+        ax.bar(x + width/2, val_acc, width, label='Validation Accuracy', alpha=0.8, color=['#27ae60', '#2980b9', '#c0392b'])
         
         ax.set_ylabel('Accuracy (%)')
         ax.set_title('Comparaison des Précisions')
         ax.set_xticks(x)
-        ax.set_xticklabels(models)
+        ax.set_xticklabels(models, rotation=15)
         ax.legend()
-        ax.set_ylim(96, 99)
+        ax.set_ylim(93, 99)
         ax.grid(True, alpha=0.3, axis='y')
         plt.tight_layout()
         st.pyplot(fig)
@@ -1058,23 +1137,128 @@ def show_about_team():
         # Speed vs Size comparison
         fig, ax = plt.subplots(figsize=(8, 5))
         
-        sizes = [2.54, 15.59]
-        fps = [56, 36.53]
-        colors = ['#2ecc71', '#3498db']
+        sizes = [2.54, 15.59, 42.71]
+        fps = [56, 36.53, 208.07]
+        colors = ['#2ecc71', '#3498db', '#e74c3c']
+        labels = ["MobileNetV3", "EfficientNet", "ResNet18"]
         
-        scatter = ax.scatter(sizes, fps, s=[500, 500], c=colors, alpha=0.6, edgecolors='black', linewidth=2)
+        scatter = ax.scatter(sizes, fps, s=[800, 800, 800], c=colors, alpha=0.6, edgecolors='black', linewidth=2)
         
-        for i, model in enumerate(models):
+        for i, model in enumerate(labels):
+            offset_x = 3 if i == 2 else 1
+            offset_y = 15 if i == 2 else 5
             ax.annotate(model, (sizes[i], fps[i]), 
-                       xytext=(10, 10), textcoords='offset points',
-                       fontsize=10, fontweight='bold')
+                       xytext=(offset_x, offset_y), textcoords='offset points',
+                       fontsize=10, fontweight='bold',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=colors[i], alpha=0.3))
         
         ax.set_xlabel('Taille du Modèle (MB)')
         ax.set_ylabel('Vitesse (FPS)')
         ax.set_title('Trade-off Taille vs Vitesse')
         ax.grid(True, alpha=0.3)
+        
+        # Annotations spéciales
+        ax.annotate('Le plus rapide!\n208 FPS 🚀', xy=(42.71, 208.07), 
+                   xytext=(30, 180), fontsize=9,
+                   arrowprops=dict(arrowstyle='->', color='red', lw=2))
+        ax.annotate('Le plus léger!\n2.54 MB 📱', xy=(2.54, 56), 
+                   xytext=(8, 80), fontsize=9,
+                   arrowprops=dict(arrowstyle='->', color='green', lw=2))
+        
         plt.tight_layout()
         st.pyplot(fig)
+    
+    st.markdown("---")
+    
+    # Analyse comparative finale
+    st.markdown("## 🎯 Analyse Comparative")
+    
+    st.markdown("""
+    ### Quel modèle choisir selon l'application?
+    
+    Notre comparaison de 3 architectures révèle des trade-offs intéressants:
+    """)
+    
+    col_use1, col_use2, col_use3 = st.columns(3)
+    
+    with col_use1:
+        st.markdown("#### 📱 Application Mobile")
+        st.success("**Gagnant: MobileNetV3**")
+        st.markdown("""
+        **Pourquoi?**
+        - Seulement 2.54 MB
+        - 97.79% accuracy
+        - 56 FPS suffisant
+        - Conçu pour mobile
+        
+        **Idéal pour:**
+        - Apps iOS/Android
+        - Appareils contraints
+        - Déploiement edge
+        """)
+    
+    with col_use2:
+        st.markdown("#### ⚡ Temps Réel Critique")
+        st.warning("**Gagnant: ResNet18**")
+        st.markdown("""
+        **Pourquoi?**
+        - 208 FPS incroyable!
+        - 4.81 ms par image
+        - Performance GPU
+        
+        **Idéal pour:**
+        - Systèmes embarqués
+        - Traitement vidéo
+        - Surveillance temps réel
+        - Avec GPU disponible
+        """)
+    
+    with col_use3:
+        st.markdown("#### 🎯 Précision Maximale")
+        st.info("**Gagnant: EfficientNet**")
+        st.markdown("""
+        **Pourquoi?**
+        - 98.06% val accuracy
+        - Seulement 45 erreurs
+        - Bon équilibre
+        
+        **Idéal pour:**
+        - Applications critiques
+        - Validation nécessaire
+        - Cloud deployment
+        - Moins d'erreurs critiques
+        """)
+    
+    st.markdown("---")
+    
+    st.markdown("### 💡 Recommandations Finales")
+    
+    rec_col1, rec_col2 = st.columns([2, 1])
+    
+    with rec_col1:
+        st.markdown("""
+        **Pour FindSpot (cette application):**
+        
+        Nous avons choisi **MobileNetV3-Small** comme modèle principal car:
+        
+        1. ✅ **Meilleur test accuracy (97.79%)** - Performance réelle optimale
+        2. ✅ **Le plus léger (2.54 MB)** - Déploiement facile sur Streamlit Cloud
+        3. ✅ **Vitesse suffisante (56 FPS)** - Largement assez pour notre usage
+        4. ✅ **Accessible partout** - Fonctionne même sur appareils limités
+        5. ✅ **Trade-off optimal** - Meilleur équilibre pour une web app
+        
+        **ResNet18** serait meilleur pour un système avec GPU dédié.
+        
+        **EfficientNet** serait meilleur si la précision maximale était critique.
+        """)
+    
+    with rec_col2:
+        st.markdown("#### 📊 Résumé")
+        st.metric("Modèles testés", "3")
+        st.metric("Gagnant test acc", "MobileNetV3")
+        st.metric("Gagnant val acc", "EfficientNet")  
+        st.metric("Gagnant vitesse", "ResNet18")
+        st.metric("Choix déployé", "MobileNetV3")
     
     st.markdown("---")
     
@@ -1105,10 +1289,11 @@ def show_about_team():
     with col_tech3:
         st.markdown("""
         **Dataset:**
-        - PKLot Dataset
-        - 12,000+ images
-        - Conditions variées
-        - Annotations JSON
+        - Action-Camera Parking Dataset
+        - GoPro Hero 6
+        - 293 images annotées
+        - Vue aérienne (~10m)
+        - Annotations ROI (JSON)
         """)
     
     st.markdown("---")
@@ -1136,9 +1321,14 @@ def show_about_team():
         - Université Laval
         - Automne 2025
         
+        **Dataset:**
+        - Action-Camera Parking Dataset
+        - Source: [Martin Marek (2021)](https://github.com/martin-marek/parking-space-occupancy)
+        - arXiv:2107.12207
+        
         **Remerciements:**
         - Professeur et assistants du cours
-        - PKLot Dataset creators
+        - Martin Marek (dataset creator)
         - Communauté Streamlit
         """)
     
