@@ -1,12 +1,6 @@
-<<<<<<< HEAD
 streamlit>=1.32
 torch==2.4.1
 torchvision==0.19.1
-=======
-streamlit
-torch>=2.5.0,<3.0.0
-torchvision>=0.18.0,<0.25.0
->>>>>>> 0d0c51e3ff06b8f59237bb4a0ad7a3b6c8ca3579
 Pillow
 matplotlib
 seaborn
