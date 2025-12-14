@@ -6,4 +6,4 @@ torchvision>=0.20.0
 numpy
 pillow
 matplotlib
-
+seaborn
