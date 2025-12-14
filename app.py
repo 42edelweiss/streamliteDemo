@@ -120,7 +120,7 @@ def main():
         "**Projet GIF-4101**\n\n"
         "Détection automatique d'occupation de places de stationnement "
         "utilisant l'apprentissage profond.\n\n"
-        "**Université Laval - Automne 2024**"
+        "**Université Laval - Automne 2025**"
     )
     
     # QR Code dans la sidebar
