@@ -30,10 +30,8 @@ try:
 except ImportError:
     pass  # EfficientNet optionnel
 
-try:
-    from resnet18 import ResNet18Classifier
-except ImportError:
-    pass  # ResNet18 optionnel
+# ResNet18 utilise ParkingNet avec ROIs - pas adapté pour comparaison simple
+# On affichera juste ses métriques
 
 # Chemins des modèles
 MODEL_PATHS = {
@@ -90,10 +88,9 @@ def load_model(model_type='mobilenet'):
         elif model_type == 'efficientnet':
             model = EfficientNetClassifier(num_classes=2)
             checkpoint_path = MODEL_PATHS['efficientnet']
-        elif model_type == 'resnet':
-            model = ResNet18Classifier(num_classes=2)
-            checkpoint_path = MODEL_PATHS['resnet']
         else:
+            # ResNet18 utilise une architecture différente (ParkingNet avec ROIs)
+            # Pas adapté pour comparaison sur image simple
             return None
         
         if Path(checkpoint_path).exists():
@@ -347,22 +344,23 @@ DÉTAILS PAR PLACE:
         )
 
 # ============================================
-# COMPARAISON DES MODÈLES - NOUVELLE FEATURE
+# COMPARAISON DES MODÈLES
 # ============================================
 
 def show_model_comparison():
-    """Page de comparaison des 3 modèles sur une même image"""
+    """Page de comparaison des modèles"""
     st.title("⚔️ Comparaison des Modèles")
     
     st.markdown("""
     ## Démarche Scientifique Rigoureuse
     
     Pour choisir le meilleur modèle pour FindSpot, nous avons **comparé 3 architectures CNN** 
-    sur le même dataset. Cette page vous permet de voir comment chaque modèle performe 
-    sur **la même image**.
+    sur le même dataset. Cette page permet de voir comment MobileNetV3 et EfficientNet performent 
+    sur **la même image** en temps réel.
+    
+    **Note:** ResNet18 utilise une architecture spécifique avec ROIs - ses métriques moyennes sont affichées.
     """)
     
-    # Upload image
     uploaded_file = st.file_uploader(
         "📸 Uploadez une image de place de stationnement",
         type=["jpg", "jpeg", "png"],
@@ -372,20 +370,16 @@ def show_model_comparison():
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert('RGB')
         
-        # Afficher l'image
         st.image(image, caption="Image à analyser", width=400)
         
         st.markdown("---")
         
-        # Bouton de comparaison
-        if st.button("🔍 Comparer les 3 Modèles", type="primary", use_container_width=True):
+        if st.button("🔍 Comparer les Modèles", type="primary", use_container_width=True):
             
             st.markdown("## 📊 Résultats de la Comparaison")
             
-            # Créer 3 colonnes
             col1, col2, col3 = st.columns(3)
             
-            # Configuration des modèles
             models_config = [
                 {
                     'name': 'MobileNetV3-Small',
@@ -418,50 +412,56 @@ def show_model_comparison():
             
             results = []
             
-            # Pour chaque modèle
             for config in models_config:
                 with config['col']:
                     st.markdown(f"### {config['icon']} {config['name']}")
                     st.caption(config['tagline'])
                     
-                    # Essayer de charger le modèle
-                    with st.spinner(f"Chargement..."):
-                        model = load_model(config['type'])
-                    
-                    if model is not None:
-                        # Prédiction réelle
-                        with st.spinner("Analyse..."):
-                            start = time.time()
-                            predicted_class, confidence, _ = predict_image(model, image)
-                            inference_time = (time.time() - start) * 1000
-                            
-                            if predicted_class is not None:
-                                prediction_text = CLASSES[predicted_class]
-                                color = "#2ecc71" if predicted_class == 0 else "#e74c3c"
+                    if config['type'] != 'resnet':
+                        # MobileNetV3 et EfficientNet: prédiction réelle
+                        with st.spinner(f"Chargement..."):
+                            model = load_model(config['type'])
+                        
+                        if model is not None:
+                            with st.spinner("Analyse..."):
+                                start = time.time()
+                                predicted_class, confidence, _ = predict_image(model, image)
+                                inference_time = (time.time() - start) * 1000
                                 
-                                st.markdown(
-                                    f"<h2 style='text-align: center; color: {color};'>{prediction_text}</h2>",
-                                    unsafe_allow_html=True
-                                )
-                                
-                                st.metric("Confiance", f"{confidence:.2f}%")
-                                st.metric("Temps", f"{inference_time:.2f} ms")
-                                
-                                results.append({
-                                    'model': config['name'],
-                                    'prediction': prediction_text,
-                                    'predicted_class': predicted_class,
-                                    'confidence': confidence,
-                                    'time': inference_time,
-                                    'color': config['color']
-                                })
-                            else:
-                                st.error("Erreur de prédiction")
+                                if predicted_class is not None:
+                                    prediction_text = CLASSES[predicted_class]
+                                    color = "#2ecc71" if predicted_class == 0 else "#e74c3c"
+                                    
+                                    st.markdown(
+                                        f"<h2 style='text-align: center; color: {color};'>{prediction_text}</h2>",
+                                        unsafe_allow_html=True
+                                    )
+                                    
+                                    st.metric("Confiance", f"{confidence:.2f}%")
+                                    st.metric("Temps", f"{inference_time:.2f} ms")
+                                    
+                                    results.append({
+                                        'model': config['name'],
+                                        'prediction': prediction_text,
+                                        'predicted_class': predicted_class,
+                                        'confidence': confidence,
+                                        'time': inference_time,
+                                        'color': config['color']
+                                    })
+                                else:
+                                    st.error("Erreur de prédiction")
+                        else:
+                            st.warning(f"Modèle non chargé")
+                            st.caption("Métriques moyennes:")
+                            st.metric("Test Accuracy", f"{config['metrics']['accuracy']:.2f}%")
+                            st.metric("Temps Moyen", f"{config['metrics']['inference_time']:.2f} ms")
                     else:
-                        # Afficher métriques moyennes
-                        st.info(f"Modèle non chargé")
+                        # ResNet18: architecture différente (ParkingNet avec ROIs)
+                        st.info("Architecture spécifique\n(ParkingNet avec ROIs)")
                         st.caption("Métriques moyennes du test:")
                         st.metric("Test Accuracy", f"{config['metrics']['accuracy']:.2f}%")
+                        st.metric("Val Accuracy", f"{config['metrics']['val_accuracy']:.2f}%")
+                        st.metric("FPS Moyen", f"{config['metrics']['fps']:.0f} 🚀")
                         st.metric("Temps Moyen", f"{config['metrics']['inference_time']:.2f} ms")
             
             # Analyse comparative
@@ -472,7 +472,7 @@ def show_model_comparison():
                 # Consensus ou divergence?
                 predictions = [r['prediction'] for r in results]
                 if len(set(predictions)) == 1:
-                    st.success(f"✅ **Consensus parfait:** Tous les modèles prédisent **{predictions[0]}**")
+                    st.success(f"✅ **Consensus parfait:** Les modèles testés prédisent **{predictions[0]}**")
                 else:
                     st.warning("⚠️ **Divergence détectée:** Les modèles ne sont pas tous d'accord")
                     for r in results:
@@ -491,7 +491,7 @@ def show_model_comparison():
                 
                 bars1 = ax1.bar(model_names, confidences, color=colors_conf, alpha=0.7, edgecolor='black', linewidth=2)
                 ax1.set_ylabel('Confiance (%)', fontsize=11, fontweight='bold')
-                ax1.set_title('Niveau de Confiance par Modèle', fontsize=13, fontweight='bold')
+                ax1.set_title('Niveau de Confiance', fontsize=13, fontweight='bold')
                 ax1.set_ylim(0, 100)
                 ax1.grid(True, alpha=0.3, axis='y')
                 
@@ -521,7 +521,8 @@ def show_model_comparison():
                 col_ins1, col_ins2 = st.columns(2)
                 
                 with col_ins1:
-                    st.info(f"⚡ **Plus rapide:** {fastest['model']} ({fastest['time']:.2f} ms)")
+                    st.info(f"⚡ **Plus rapide (testé):** {fastest['model']} ({fastest['time']:.2f} ms)")
+                    st.caption(f"ResNet18 moyenne: 4.81 ms (208 FPS)")
                     
                 with col_ins2:
                     st.info(f"🎯 **Plus confiant:** {most_confident['model']} ({most_confident['confidence']:.1f}%)")
@@ -538,9 +539,9 @@ def show_model_comparison():
                 - ✅ **Vitesse suffisante (56 FPS)** - Largement assez pour notre usage
                 - ✅ **Trade-off optimal** - Équilibre parfait pour une application web
                 
-                **ResNet18** serait meilleur pour un système avec GPU dédié (208 FPS!).
+                **ResNet18** serait meilleur pour système avec GPU (208 FPS en moyenne!).
                 
-                **EfficientNet** serait meilleur si validation accuracy était critique (98.06%).
+                **EfficientNet** serait meilleur si validation accuracy maximale était critique (98.06%).
                 """)
     
     else:
@@ -573,7 +574,7 @@ def show_model_comparison():
             - FPS: 56
             - **✅ Choisi pour FindSpot**
             
-            *Optimisé pour mobile et edge devices*
+            *Optimisé pour mobile et cloud*
             """)
         
         with col_arch2:
@@ -595,7 +596,7 @@ def show_model_comparison():
             - Taille: 42.71 MB
             - FPS: **208** 🏆
             
-            *Architecture classique, ultra-rapide!*
+            *Architecture avec ROIs, ultra-rapide!*
             """)
 
 def main():
@@ -660,13 +661,12 @@ def show_home():
     Développer un système efficace de détection d'occupation de places de stationnement capable de
     fonctionner en temps réel sur des appareils à ressources limitées.
     
-    ### 🏗️ Architecture Utilisée
+    ### 🏗️ Architectures Comparées
     
-    **MobileNetV3-Small** - Architecture légère optimisée pour mobile avec:
-    - Convolutions séparables en profondeur
-    - Résiduels inversés et goulots d'étranglement linéaires
-    - Modules Squeeze-and-Excite
-    - Activation H-Swish
+    **3 modèles CNN testés rigoureusement:**
+    - **MobileNetV3-Small** - Optimisé pour mobile (choisi pour FindSpot)
+    - **EfficientNet-B0** - Architecture efficace (meilleure validation)
+    - **ResNet18** - Architecture classique (ultra-rapide: 208 FPS!)
     
     ### 📊 Dataset
     
@@ -679,9 +679,9 @@ def show_home():
     ### 🚀 Comment Utiliser
     
     1. **Prédiction** - Uploadez une image pour détecter si une place est libre ou occupée
-    2. **Comparaison** - Comparez les 3 modèles sur une même image
+    2. **Comparaison** - Comparez MobileNetV3 et EfficientNet en temps réel
     3. **Avec Annotations** - Analysez un parking complet avec visualisation de chaque place
-    4. **Performance** - Consultez les métriques détaillées du modèle
+    4. **Performance** - Consultez les métriques détaillées des modèles
     5. **Statistiques** - Explorez les données du dataset
     """)
     
@@ -713,7 +713,7 @@ def show_home():
     
     with col2:
         st.markdown("#### ⚔️ Comparaison Modèles")
-        st.success("3 modèles → 1 image → Comparaison")
+        st.success("2 modèles testés en temps réel")
         st.info("Idéal pour: Comprendre les trade-offs")
     
     with col3:
@@ -730,7 +730,7 @@ def show_home():
         
         **Technologies utilisées:**
         - Framework: Streamlit
-        - ML: PyTorch + MobileNetV3 + EfficientNet + ResNet
+        - ML: PyTorch + MobileNetV3 + EfficientNet + ResNet18
         - Visualisation: Matplotlib, Seaborn, PIL
         
         **Équipe - GIF-4101:**
@@ -752,7 +752,6 @@ def show_prediction():
     automatiquement si la place est **Libre** ou **Occupée**.
     """)
     
-    # Upload de fichier
     uploaded_file = st.file_uploader(
         "Choisissez une image de place de stationnement",
         type=["jpg", "jpeg", "png"],
@@ -760,7 +759,6 @@ def show_prediction():
     )
     
     if uploaded_file is not None:
-        # Afficher l'image
         image = Image.open(uploaded_file).convert('RGB')
         
         col_img, col_result = st.columns([1, 1])
@@ -768,7 +766,6 @@ def show_prediction():
         with col_img:
             st.image(image, caption="Image uploadée", use_container_width=True)
         
-        # Charger le modèle et faire la prédiction
         with st.spinner("Chargement du modèle MobileNetV3..."):
             model = load_model('mobilenet')
         
@@ -780,7 +777,6 @@ def show_prediction():
                 with col_result:
                     st.markdown("### 🎯 Résultat de la Prédiction")
                     
-                    # Afficher la prédiction avec un style coloré
                     prediction_text = CLASSES[predicted_class]
                     color = "green" if predicted_class == 0 else "red"
                     
@@ -791,7 +787,6 @@ def show_prediction():
                     
                     st.metric("Confiance", f"{confidence:.2f}%")
                     
-                    # Graphique des probabilités
                     st.markdown("#### Probabilités par Classe")
                     fig, ax = plt.subplots(figsize=(6, 3))
                     colors_bar = ['green', 'red']
@@ -803,7 +798,6 @@ def show_prediction():
                     plt.tight_layout()
                     st.pyplot(fig)
                     
-                    # Informations du modèle
                     st.markdown("---")
                     st.markdown("#### ℹ️ Informations du Modèle")
                     
@@ -817,7 +811,6 @@ def show_prediction():
     else:
         st.info("👆 Uploadez une image pour commencer l'analyse")
         
-        # Instructions
         with st.expander("💡 Conseils pour de meilleurs résultats"):
             st.markdown("""
             - Utilisez des images claires de places de stationnement
@@ -896,39 +889,37 @@ def show_annotated_prediction():
 
 def show_performance():
     """Page de performance du modèle"""
-    st.title("📊 Performance du Modèle")
+    st.title("📊 Performance des Modèles")
     
     st.markdown("""
-    Métriques détaillées de performance du modèle MobileNetV3-Small sur le dataset.
+    Métriques détaillées de performance des 3 modèles comparés sur le dataset.
     """)
     
     # Métriques principales
     st.markdown("### 🎯 Métriques de Classification")
     
-    col1, col2, col3, col4 = st.columns(4)
-    
-    metrics = MODELS_METRICS['MobileNetV3']
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Précision (Accuracy)", f"{metrics['accuracy']:.2f}%")
+        st.markdown("#### 📱 MobileNetV3-Small")
+        st.metric("Test Accuracy", "97.79%")
+        st.metric("Val Accuracy", "97.85%")
+        st.metric("FPS", "56")
+        st.metric("Taille", "2.54 MB")
+    
     with col2:
-        st.metric("Précision (Precision)", "97.63%")
+        st.markdown("#### ⚖️ EfficientNet-B0")
+        st.metric("Test Accuracy", "96.98%")
+        st.metric("Val Accuracy", "98.06%")
+        st.metric("FPS", "36.53")
+        st.metric("Taille", "15.59 MB")
+    
     with col3:
-        st.metric("Rappel (Recall)", "97.80%")
-    with col4:
-        st.metric("Score F1", "97.71%")
-    
-    st.markdown("---")
-    st.markdown("### ⚡ Performance d'Inférence")
-    
-    speed_col1, speed_col2, speed_col3 = st.columns(3)
-    
-    with speed_col1:
-        st.metric("Temps Moyen", f"{metrics['inference_time']:.2f} ms")
-    with speed_col2:
-        st.metric("FPS", metrics['fps'])
-    with speed_col3:
-        st.metric("Taille du Modèle", f"{metrics['model_size']:.2f} MB")
+        st.markdown("#### ⚡ ResNet18")
+        st.metric("Test Accuracy", "94.97%")
+        st.metric("Val Accuracy", "95.85%")
+        st.metric("FPS", "208")
+        st.metric("Taille", "42.71 MB")
 
 def show_statistics():
     """Page de statistiques du dataset"""
@@ -938,7 +929,7 @@ def show_statistics():
     ### Dataset Action-Camera Parking (GoPro Hero 6)
     
     Statistiques détaillées sur l'ensemble de données utilisé pour l'entraînement 
-    et l'évaluation du modèle. Images capturées à ~10 mètres de hauteur avec GoPro Hero 6.
+    et l'évaluation des modèles. Images capturées à ~10 mètres de hauteur avec GoPro Hero 6.
     """)
     
     col1, col2, col3, col4 = st.columns(4)
@@ -953,7 +944,7 @@ def show_statistics():
         st.metric("Hauteur", "~10m")
 
 def show_about_team():
-    """Page À propos de l'équipe - version simplifiée pour ce fichier"""
+    """Page À propos de l'équipe"""
     st.title("👥 À propos de FindSpot")
     
     st.markdown("""
@@ -973,11 +964,13 @@ def show_about_team():
     
     with col1:
         st.markdown("### Félix Légaré")
-        st.markdown("**ResNet18** - 208 FPS! 🚀")
+        st.markdown("**ResNet18 (ParkingNet)** - 208 FPS! 🚀")
+        st.markdown("Architecture avec ROIs - Ultra-rapide")
     
     with col2:
         st.markdown("### Rayan Nadeau")
         st.markdown("**EfficientNet-B0** - 98.06% val acc! 🏆")
+        st.markdown("Meilleure validation accuracy")
 
 if __name__ == "__main__":
     main()
