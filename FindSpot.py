@@ -30,9 +30,6 @@ try:
 except ImportError:
     pass  # EfficientNet optionnel
 
-# ResNet18 utilise ParkingNet avec ROIs - pas adapté pour comparaison simple
-# On affichera juste ses métriques
-
 # Chemins des modèles
 MODEL_PATHS = {
     'mobilenet': "best_mobilenet.pt",
@@ -40,11 +37,14 @@ MODEL_PATHS = {
     'resnet': "best_resnet.pt"
 }
 
-# Métriques des modèles
+# Métriques des 3 modèles
 MODELS_METRICS = {
     "MobileNetV3": {
         "accuracy": 97.79,
         "val_accuracy": 97.85,
+        "precision": 97.63,
+        "recall": 97.80,
+        "f1_score": 97.71,
         "inference_time": 17.94,
         "fps": 56,
         "model_size": 2.54,
@@ -89,8 +89,7 @@ def load_model(model_type='mobilenet'):
             model = EfficientNetClassifier(num_classes=2)
             checkpoint_path = MODEL_PATHS['efficientnet']
         else:
-            # ResNet18 utilise une architecture différente (ParkingNet avec ROIs)
-            # Pas adapté pour comparaison sur image simple
+            # ResNet18 utilise ParkingNet avec ROIs - pas adapté pour comparaison simple
             return None
         
         if Path(checkpoint_path).exists():
@@ -344,11 +343,11 @@ DÉTAILS PAR PLACE:
         )
 
 # ============================================
-# COMPARAISON DES MODÈLES
+# PAGE COMPARAISON DES MODÈLES
 # ============================================
 
 def show_model_comparison():
-    """Page de comparaison des modèles"""
+    """Page de comparaison des modèles avec fix ResNet18"""
     st.title("⚔️ Comparaison des Modèles")
     
     st.markdown("""
@@ -358,7 +357,7 @@ def show_model_comparison():
     sur le même dataset. Cette page permet de voir comment MobileNetV3 et EfficientNet performent 
     sur **la même image** en temps réel.
     
-    **Note:** ResNet18 utilise une architecture spécifique avec ROIs - ses métriques moyennes sont affichées.
+    **Note:** ResNet18 utilise une architecture spécifique (ParkingNet avec ROIs) - ses métriques moyennes sont affichées.
     """)
     
     uploaded_file = st.file_uploader(
@@ -599,6 +598,10 @@ def show_model_comparison():
             *Architecture avec ROIs, ultra-rapide!*
             """)
 
+# ============================================
+# MAIN ET PAGES
+# ============================================
+
 def main():
     # Sidebar
     st.sidebar.title("🅿️ FindSpot")
@@ -744,7 +747,7 @@ def show_home():
         """)
 
 def show_prediction():
-    """Page de prédiction"""
+    """Page de prédiction simple"""
     st.title("🔍 Prédiction de Place de Stationnement")
     
     st.markdown("""
@@ -888,14 +891,13 @@ def show_annotated_prediction():
         st.info("👆 Uploadez une image ET son fichier d'annotations pour commencer")
 
 def show_performance():
-    """Page de performance du modèle"""
+    """Page de performance"""
     st.title("📊 Performance des Modèles")
     
     st.markdown("""
     Métriques détaillées de performance des 3 modèles comparés sur le dataset.
     """)
     
-    # Métriques principales
     st.markdown("### 🎯 Métriques de Classification")
     
     col1, col2, col3 = st.columns(3)
@@ -922,7 +924,7 @@ def show_performance():
         st.metric("Taille", "42.71 MB")
 
 def show_statistics():
-    """Page de statistiques du dataset"""
+    """Page de statistiques"""
     st.title("📈 Statistiques du Dataset")
     
     st.markdown("""
@@ -944,7 +946,7 @@ def show_statistics():
         st.metric("Hauteur", "~10m")
 
 def show_about_team():
-    """Page À propos de l'équipe"""
+    """Page À propos avec TOUS les graphiques et trade-offs"""
     st.title("👥 À propos de FindSpot")
     
     st.markdown("""
@@ -952,25 +954,455 @@ def show_about_team():
     
     **FindSpot** est un système intelligent de détection d'occupation de places de stationnement 
     développé dans le cadre du cours **GIF-4101** à l'Université Laval (Automne 2025).
+    
+    Le projet utilise des techniques d'apprentissage profond pour analyser des images de parkings 
+    et détecter automatiquement si les places sont libres ou occupées, avec une précision de plus de 97%.
     """)
     
-    st.markdown("## 👨‍💻 Créateur Principal")
-    st.markdown("### Salem N. Nyisingize")
-    st.markdown("**MobileNetV3-Small** - 97.79% test accuracy")
+    st.markdown("---")
     
+    # Créateur Principal
+    st.markdown("## 👨‍💻 Créateur Principal")
+    
+    col_creator = st.columns([1, 3])
+    
+    with col_creator[0]:
+        st.markdown("### Salem N. Nyisingize")
+        st.markdown("**@42edelweiss**")
+    
+    with col_creator[1]:
+        st.markdown("""
+        **Rôle:** Architecte principal & Développeur
+        
+        **Contributions:**
+        - 🏗️ Architecture du modèle MobileNetV3-Small
+        - 💻 Développement de l'application Streamlit
+        - 📊 Pipeline d'entraînement et d'évaluation
+        - 🎨 Interface utilisateur et visualisations
+        - 🚀 Déploiement et optimisation
+        
+        **Modèle:** MobileNetV3-Small (97.79% accuracy)
+        """)
+        
+        st.metric("Test Accuracy", "97.79%", "+0.5%")
+        st.metric("Model Size", "2.54 MB", "Léger")
+        st.metric("Inference Speed", "56 FPS", "Rapide")
+    
+    st.markdown("---")
+    
+    # Membres de l'équipe
     st.markdown("## 🤝 Membres de l'Équipe")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### Félix Légaré")
-        st.markdown("**ResNet18 (ParkingNet)** - 208 FPS! 🚀")
-        st.markdown("Architecture avec ROIs - Ultra-rapide")
+        st.markdown("**@flegare07**")
+        st.markdown("""
+        **Contribution:** Modèle ResNet18
+        
+        **Résultats:**
+        - Test Accuracy: **94.97%**
+        - Validation Accuracy: **95.85%**
+        - Best Epoch: 9
+        - **Le plus rapide:** 208 FPS! 🚀
+        """)
+        
+        with st.expander("📊 Métriques ResNet18"):
+            st.markdown("### Performance")
+            col_res1, col_res2, col_res3 = st.columns(3)
+            with col_res1:
+                st.metric("Test Acc", "94.97%")
+            with col_res2:
+                st.metric("Val Acc", "95.85%")
+            with col_res3:
+                st.metric("Best Epoch", "9")
+            
+            st.markdown("### Vitesse d'Inférence ⚡")
+            col_speed1, col_speed2, col_speed3 = st.columns(3)
+            with col_speed1:
+                st.metric("Temps Moyen", "4.81 ms", "🔥 Le plus rapide!")
+            with col_speed2:
+                st.metric("FPS", "208.07", "🚀 Record!")
+            with col_speed3:
+                st.metric("Médiane", "4.71 ms")
+            
+            st.success("⚡ ResNet18 est le modèle le PLUS RAPIDE avec 208 FPS!")
+            
+            st.markdown("### Modèle")
+            col_model1, col_model2, col_model3 = st.columns(3)
+            with col_model1:
+                st.metric("Taille", "42.71 MB")
+            with col_model2:
+                st.metric("Paramètres", "11.18M")
+            with col_model3:
+                st.metric("Device", "CUDA")
+            
+            st.markdown("### Détails Vitesse")
+            st.write(f"**Écart-type:** 0.37 ms")
+            st.write(f"**Min:** 4.33 ms")
+            st.write(f"**Max:** 7.68 ms")
+            
+            st.markdown("### Matrice de Confusion")
+            confusion_res = np.array([[855, 30], [45, 560]])
+            fig, ax = plt.subplots(figsize=(6, 4))
+            sns.heatmap(confusion_res, annot=True, fmt='d', cmap='Greens',
+                       xticklabels=["Libre", "Occupé"], 
+                       yticklabels=["Libre", "Occupé"], ax=ax)
+            ax.set_xlabel('Prédiction')
+            ax.set_ylabel('Vraie Classe')
+            ax.set_title('ResNet18 - Matrice de Confusion')
+            st.pyplot(fig)
+            
+            st.markdown("""
+            **Statistiques:**
+            - Total d'échantillons: 1,490
+            - Prédictions correctes: 1,415
+            - Prédictions incorrectes: 75
+            - Faux positifs: 30
+            - Faux négatifs: 45
+            """)
     
     with col2:
         st.markdown("### Rayan Nadeau")
-        st.markdown("**EfficientNet-B0** - 98.06% val acc! 🏆")
-        st.markdown("Meilleure validation accuracy")
+        st.markdown("**GameScopeX5**")
+        st.markdown("""
+        **Contribution:** Modèle EfficientNet-B0
+        
+        **Résultats:**
+        - Test Accuracy: **96.98%**
+        - Validation Accuracy: **98.06%** (La meilleure!)
+        - Best Epoch: 5
+        """)
+        
+        with st.expander("📊 Métriques EfficientNet-B0"):
+            st.markdown("### Performance")
+            col_eff1, col_eff2, col_eff3 = st.columns(3)
+            with col_eff1:
+                st.metric("Test Acc", "96.98%")
+            with col_eff2:
+                st.metric("Val Acc", "98.06%", "🏆 La meilleure!")
+            with col_eff3:
+                st.metric("Best Epoch", "5")
+            
+            st.success("🏆 EfficientNet a la MEILLEURE validation accuracy!")
+            
+            st.markdown("### Vitesse d'Inférence")
+            col_speed1, col_speed2, col_speed3 = st.columns(3)
+            with col_speed1:
+                st.metric("Temps Moyen", "27.37 ms")
+            with col_speed2:
+                st.metric("FPS", "36.53")
+            with col_speed3:
+                st.metric("Médiane", "25.03 ms")
+            
+            st.markdown("### Modèle")
+            col_model1, col_model2 = st.columns(2)
+            with col_model1:
+                st.metric("Taille", "15.59 MB")
+            with col_model2:
+                st.metric("Paramètres", "4.01M")
+            
+            st.markdown("### Matrice de Confusion")
+            confusion_eff = np.array([[867, 18], [27, 578]])
+            fig, ax = plt.subplots(figsize=(6, 4))
+            sns.heatmap(confusion_eff, annot=True, fmt='d', cmap='Blues',
+                       xticklabels=["Libre", "Occupé"], 
+                       yticklabels=["Libre", "Occupé"], ax=ax)
+            ax.set_xlabel('Prédiction')
+            ax.set_ylabel('Vraie Classe')
+            ax.set_title('EfficientNet-B0 - Matrice de Confusion')
+            st.pyplot(fig)
+            
+            st.markdown("""
+            **Statistiques:**
+            - Total d'échantillons: 1,490
+            - Prédictions correctes: 1,445
+            - Prédictions incorrectes: 45
+            - Faux positifs: 18
+            - Faux négatifs: 27
+            """)
+    
+    st.markdown("---")
+    
+    # Comparaison des modèles
+    st.markdown("## 📊 Comparaison des Modèles")
+    
+    comparison_data = {
+        "Modèle": ["MobileNetV3-Small", "EfficientNet-B0", "ResNet18"],
+        "Test Accuracy (%)": [97.79, 96.98, 94.97],
+        "Val Accuracy (%)": [97.85, 98.06, 95.85],
+        "Taille (MB)": [2.54, 15.59, 42.71],
+        "FPS": [56, 36.53, 208.07],
+        "Temps (ms)": [17.94, 27.37, 4.81],
+        "Paramètres (M)": [1.52, 4.01, 11.18]
+    }
+    
+    st.dataframe(comparison_data, use_container_width=True)
+    
+    # Points forts de chaque modèle
+    st.markdown("### 🏆 Points Forts")
+    
+    col_strong1, col_strong2, col_strong3 = st.columns(3)
+    
+    with col_strong1:
+        st.success("**MobileNetV3-Small**")
+        st.write("🏆 Meilleur test accuracy (97.79%)")
+        st.write("⚡ Le plus léger (2.54 MB)")
+        st.write("📱 Idéal pour mobile")
+    
+    with col_strong2:
+        st.info("**EfficientNet-B0**")
+        st.write("🏆 Meilleure val accuracy (98.06%)")
+        st.write("⚖️ Bon équilibre taille/perf")
+        st.write("🎯 Moins d'erreurs (45)")
+    
+    with col_strong3:
+        st.warning("**ResNet18**")
+        st.write("🏆 LE PLUS RAPIDE (208 FPS!)")
+        st.write("⚡ Seulement 4.81 ms/image")
+        st.write("🚀 Idéal pour temps réel")
+    
+    # Graphique de comparaison
+    st.markdown("### 📈 Comparaison Visuelle")
+    
+    col_comp1, col_comp2 = st.columns(2)
+    
+    with col_comp1:
+        # Accuracy comparison
+        fig, ax = plt.subplots(figsize=(8, 5))
+        models = ["MobileNetV3", "EfficientNet-B0", "ResNet18"]
+        test_acc = [97.79, 96.98, 94.97]
+        val_acc = [97.85, 98.06, 95.85]
+        
+        x = np.arange(len(models))
+        width = 0.35
+        
+        ax.bar(x - width/2, test_acc, width, label='Test Accuracy', alpha=0.8, color=['#2ecc71', '#3498db', '#e74c3c'])
+        ax.bar(x + width/2, val_acc, width, label='Validation Accuracy', alpha=0.8, color=['#27ae60', '#2980b9', '#c0392b'])
+        
+        ax.set_ylabel('Accuracy (%)')
+        ax.set_title('Comparaison des Précisions')
+        ax.set_xticks(x)
+        ax.set_xticklabels(models, rotation=15)
+        ax.legend()
+        ax.set_ylim(93, 99)
+        ax.grid(True, alpha=0.3, axis='y')
+        plt.tight_layout()
+        st.pyplot(fig)
+    
+    with col_comp2:
+        # Speed vs Size comparison
+        fig, ax = plt.subplots(figsize=(8, 5))
+        
+        sizes = [2.54, 15.59, 42.71]
+        fps = [56, 36.53, 208.07]
+        colors = ['#2ecc71', '#3498db', '#e74c3c']
+        labels = ["MobileNetV3", "EfficientNet", "ResNet18"]
+        
+        scatter = ax.scatter(sizes, fps, s=[800, 800, 800], c=colors, alpha=0.6, edgecolors='black', linewidth=2)
+        
+        for i, model in enumerate(labels):
+            offset_x = 3 if i == 2 else 1
+            offset_y = 15 if i == 2 else 5
+            ax.annotate(model, (sizes[i], fps[i]), 
+                       xytext=(offset_x, offset_y), textcoords='offset points',
+                       fontsize=10, fontweight='bold',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=colors[i], alpha=0.3))
+        
+        ax.set_xlabel('Taille du Modèle (MB)')
+        ax.set_ylabel('Vitesse (FPS)')
+        ax.set_title('Trade-off Taille vs Vitesse')
+        ax.grid(True, alpha=0.3)
+        
+        # Annotations spéciales
+        ax.annotate('Le plus rapide!\n208 FPS 🚀', xy=(42.71, 208.07), 
+                   xytext=(30, 180), fontsize=9,
+                   arrowprops=dict(arrowstyle='->', color='red', lw=2))
+        ax.annotate('Le plus léger!\n2.54 MB 📱', xy=(2.54, 56), 
+                   xytext=(8, 80), fontsize=9,
+                   arrowprops=dict(arrowstyle='->', color='green', lw=2))
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+    
+    st.markdown("---")
+    
+    # Analyse comparative finale
+    st.markdown("## 🎯 Analyse Comparative")
+    
+    st.markdown("""
+    ### Quel modèle choisir selon l'application?
+    
+    Notre comparaison de 3 architectures révèle des trade-offs intéressants:
+    """)
+    
+    col_use1, col_use2, col_use3 = st.columns(3)
+    
+    with col_use1:
+        st.markdown("#### 📱 Application Mobile")
+        st.success("**Gagnant: MobileNetV3**")
+        st.markdown("""
+        **Pourquoi?**
+        - Seulement 2.54 MB
+        - 97.79% accuracy
+        - 56 FPS suffisant
+        - Conçu pour mobile
+        
+        **Idéal pour:**
+        - Apps iOS/Android
+        - Appareils contraints
+        - Déploiement edge
+        """)
+    
+    with col_use2:
+        st.markdown("#### ⚡ Temps Réel Critique")
+        st.warning("**Gagnant: ResNet18**")
+        st.markdown("""
+        **Pourquoi?**
+        - 208 FPS incroyable!
+        - 4.81 ms par image
+        - Performance GPU
+        
+        **Idéal pour:**
+        - Systèmes embarqués
+        - Traitement vidéo
+        - Surveillance temps réel
+        - Avec GPU disponible
+        """)
+    
+    with col_use3:
+        st.markdown("#### 🎯 Précision Maximale")
+        st.info("**Gagnant: EfficientNet**")
+        st.markdown("""
+        **Pourquoi?**
+        - 98.06% val accuracy
+        - Seulement 45 erreurs
+        - Bon équilibre
+        
+        **Idéal pour:**
+        - Applications critiques
+        - Validation nécessaire
+        - Cloud deployment
+        - Moins d'erreurs critiques
+        """)
+    
+    st.markdown("---")
+    
+    st.markdown("### 💡 Recommandations Finales")
+    
+    rec_col1, rec_col2 = st.columns([2, 1])
+    
+    with rec_col1:
+        st.markdown("""
+        **Pour FindSpot (cette application):**
+        
+        Nous avons choisi **MobileNetV3-Small** comme modèle principal car:
+        
+        1. ✅ **Meilleur test accuracy (97.79%)** - Performance réelle optimale
+        2. ✅ **Le plus léger (2.54 MB)** - Déploiement facile sur Streamlit Cloud
+        3. ✅ **Vitesse suffisante (56 FPS)** - Largement assez pour notre usage
+        4. ✅ **Accessible partout** - Fonctionne même sur appareils limités
+        5. ✅ **Trade-off optimal** - Meilleur équilibre pour une web app
+        
+        **ResNet18** serait meilleur pour un système avec GPU dédié.
+        
+        **EfficientNet** serait meilleur si la précision maximale était critique.
+        """)
+    
+    with rec_col2:
+        st.markdown("#### 📊 Résumé")
+        st.metric("Modèles testés", "3")
+        st.metric("Gagnant test acc", "MobileNetV3")
+        st.metric("Gagnant val acc", "EfficientNet")  
+        st.metric("Gagnant vitesse", "ResNet18")
+        st.metric("Choix déployé", "MobileNetV3")
+    
+    st.markdown("---")
+    
+    # Technologies utilisées
+    st.markdown("## 🛠️ Technologies Utilisées")
+    
+    col_tech1, col_tech2, col_tech3 = st.columns(3)
+    
+    with col_tech1:
+        st.markdown("""
+        **Machine Learning:**
+        - PyTorch
+        - torchvision
+        - MobileNetV3
+        - EfficientNet
+        - ResNet
+        """)
+    
+    with col_tech2:
+        st.markdown("""
+        **Visualisation:**
+        - Streamlit
+        - Matplotlib
+        - Seaborn
+        - PIL/Pillow
+        """)
+    
+    with col_tech3:
+        st.markdown("""
+        **Dataset:**
+        - Action-Camera Parking Dataset
+        - GoPro Hero 6
+        - 293 images annotées
+        - Vue aérienne (~10m)
+        - Annotations ROI (JSON)
+        """)
+    
+    st.markdown("---")
+    
+    # Contact et liens
+    st.markdown("## 📞 Contact & Liens")
+    
+    col_contact1, col_contact2 = st.columns(2)
+    
+    with col_contact1:
+        st.markdown("""
+        **GitHub du Projet:**
+        - Repository: [flegare07/GIF-4101](https://github.com/flegare07/GIF-4101)
+        - Créateur: [@42edelweiss](https://github.com/42edelweiss)
+        
+        **Application:**
+        - URL: https://findspot.streamlit.app
+        - Déployé sur: Streamlit Cloud
+        """)
+    
+    with col_contact2:
+        st.markdown("""
+        **Cours:**
+        - GIF-4101 - Introduction à l'Apprentissage Automatique
+        - Université Laval
+        - Automne 2025
+        
+        **Dataset:**
+        - Action-Camera Parking Dataset
+        - Source: [Martin Marek (2021)](https://github.com/martin-marek/parking-space-occupancy)
+        - arXiv:2107.12207
+        
+        **Remerciements:**
+        - Professeur et assistants du cours
+        - Martin Marek (dataset creator)
+        - Communauté Streamlit
+        """)
+    
+    st.markdown("---")
+    
+    # Footer
+    st.markdown("""
+    <div style='text-align: center; padding: 20px; background-color: #f0f0f0; border-radius: 10px;'>
+        <h3>🅿️ FindSpot</h3>
+        <p><strong>Développé avec ❤️ par Salem N. Nyisingize et l'équipe</strong></p>
+        <p>GIF-4101 | Université Laval | Automne 2025</p>
+        <p style='font-size: 0.9em; color: gray;'>
+            Powered by PyTorch • Streamlit • MobileNetV3 • EfficientNet • ResNet18
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
