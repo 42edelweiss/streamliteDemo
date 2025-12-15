@@ -962,7 +962,7 @@ def show_about_team():
     st.markdown("---")
     
     # Créateur Principal
-    st.markdown("## 👨‍💻 Créateur Principal")
+    st.markdown("## 👨‍💻 Développeur Principal")
     
     col_creator = st.columns([1, 3])
     
@@ -972,21 +972,22 @@ def show_about_team():
     
     with col_creator[1]:
         st.markdown("""
-        **Rôle:** Architecte principal & Développeur
+        **Rôle:** Développeur Principal & ML Engineer
         
         **Contributions:**
-        - 🏗️ Architecture du modèle MobileNetV3-Small
-        - 💻 Développement de l'application Streamlit
-        - 📊 Pipeline d'entraînement et d'évaluation
-        - 🎨 Interface utilisateur et visualisations
-        - 🚀 Déploiement et optimisation
+        - 🔬 Comparaison rigoureuse de 3 architectures CNN (MobileNetV3, EfficientNet, ResNet18)
+        - 💻 Implémentation et entraînement de MobileNetV3-Small pour classification binaire
+        - 📊 Pipeline complet d'entraînement, validation et évaluation
+        - 🎨 Développement de l'application web Streamlit complète
+        - 📈 Création de toutes les visualisations et analyses comparatives
+        - 🚀 Déploiement cloud et optimisation pour production
         
-        **Modèle:** MobileNetV3-Small (97.79% accuracy)
+        **Modèle déployé:** MobileNetV3-Small (Howard et al., 2019) adapté et entraîné
         """)
         
-        st.metric("Test Accuracy", "97.79%", "+0.5%")
-        st.metric("Model Size", "2.54 MB", "Léger")
-        st.metric("Inference Speed", "56 FPS", "Rapide")
+        st.metric("Test Accuracy", "97.79%", "Meilleur des 3")
+        st.metric("Model Size", "2.54 MB", "Le plus léger")
+        st.metric("Inference Speed", "56 FPS", "Optimal")
     
     st.markdown("---")
     
