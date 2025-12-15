@@ -19,24 +19,55 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Import du modèle
+# Import des modèles
 try:
     from mobilenet import MobileNetV3Classifier
 except ImportError:
-    st.error("Erreur: Impossible d'importer MobileNetV3Classifier. Vérifiez que le fichier mobilenet.py existe.")
+    st.error("Erreur: Impossible d'importer MobileNetV3Classifier.")
 
-# Chemin du modèle (CORRIGÉ avec underscore)
-MODEL_PATH = "best_mobilenet.pt"
+try:
+    from efficientnet import EfficientNetClassifier
+except ImportError:
+    pass  # EfficientNet optionnel
 
-# Métriques du modèle (MobileNetV3-Small)
-MODEL_METRICS = {
-    "accuracy": 97.79,
-    "precision": 97.63,
-    "recall": 97.80,
-    "f1_score": 97.71,
-    "inference_time": 17.94,
-    "fps": 56,
-    "model_size": 2.54
+try:
+    from resnet18 import ResNet18Classifier
+except ImportError:
+    pass  # ResNet18 optionnel
+
+# Chemins des modèles
+MODEL_PATHS = {
+    'mobilenet': "best_mobilenet.pt",
+    'efficientnet': "best_efficientnet.pt",
+    'resnet': "best_resnet.pt"
+}
+
+# Métriques des modèles
+MODELS_METRICS = {
+    "MobileNetV3": {
+        "accuracy": 97.79,
+        "val_accuracy": 97.85,
+        "inference_time": 17.94,
+        "fps": 56,
+        "model_size": 2.54,
+        "params": 1.52
+    },
+    "EfficientNet": {
+        "accuracy": 96.98,
+        "val_accuracy": 98.06,
+        "inference_time": 27.37,
+        "fps": 36.53,
+        "model_size": 15.59,
+        "params": 4.01
+    },
+    "ResNet18": {
+        "accuracy": 94.97,
+        "val_accuracy": 95.85,
+        "inference_time": 4.81,
+        "fps": 208.07,
+        "model_size": 42.71,
+        "params": 11.18
+    }
 }
 
 # Transformation des images
@@ -50,16 +81,24 @@ transform = transforms.Compose([
 CLASSES = ["Libre", "Occupé"]
 
 @st.cache_resource
-def load_model():
-    """Charge le modèle MobileNetV3"""
+def load_model(model_type='mobilenet'):
+    """Charge un modèle spécifique"""
     try:
-        model = MobileNetV3Classifier(num_classes=2, pretrained=False, version='small')
+        if model_type == 'mobilenet':
+            model = MobileNetV3Classifier(num_classes=2, pretrained=False, version='small')
+            checkpoint_path = MODEL_PATHS['mobilenet']
+        elif model_type == 'efficientnet':
+            model = EfficientNetClassifier(num_classes=2)
+            checkpoint_path = MODEL_PATHS['efficientnet']
+        elif model_type == 'resnet':
+            model = ResNet18Classifier(num_classes=2)
+            checkpoint_path = MODEL_PATHS['resnet']
+        else:
+            return None
         
-        # Charger les poids
-        if Path(MODEL_PATH).exists():
-            checkpoint = torch.load(MODEL_PATH, map_location='cpu')
+        if Path(checkpoint_path).exists():
+            checkpoint = torch.load(checkpoint_path, map_location='cpu')
             
-            # Gérer différents formats de checkpoint
             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                 model.load_state_dict(checkpoint['model_state_dict'])
             else:
@@ -68,19 +107,16 @@ def load_model():
             model.eval()
             return model
         else:
-            st.error(f"Checkpoint non trouvé: {MODEL_PATH}")
             return None
     except Exception as e:
-        st.error(f"Erreur lors du chargement du modèle: {e}")
+        st.error(f"Erreur chargement {model_type}: {e}")
         return None
 
 def predict_image(model, image):
     """Fait une prédiction sur l'image"""
     try:
-        # Prétraiter l'image
         img_tensor = transform(image).unsqueeze(0)
         
-        # Prédiction
         with torch.no_grad():
             outputs = model(img_tensor)
             probabilities = torch.softmax(outputs, dim=1)
@@ -107,11 +143,8 @@ def generate_qr_code(url):
     return img
 
 def find_rois_for_image(image_name, annotations):
-    """
-    Trouve les ROIs pour une image donnée dans le fichier d'annotations
-    """
+    """Trouve les ROIs pour une image donnée"""
     try:
-        # Supporter plusieurs formats de JSON
         if "train" in annotations:
             file_names = annotations["train"]["file_names"]
             rois_list = annotations["train"]["rois_list"]
@@ -124,7 +157,6 @@ def find_rois_for_image(image_name, annotations):
         else:
             return None
         
-        # Trouver l'index de l'image
         if image_name in file_names:
             index = file_names.index(image_name)
             return rois_list[index]
@@ -135,31 +167,24 @@ def find_rois_for_image(image_name, annotations):
         return None
 
 def analyze_parking_with_rois(image, rois, model):
-    """
-    Analyse chaque place de parking définie par les ROIs
-    """
+    """Analyse chaque place de parking définie par les ROIs"""
     results = []
     img_width, img_height = image.size
     
     for roi in rois:
-        # Convertir les coordonnées normalisées en pixels
         points = []
         for point in roi:
             x = int(point[0] * img_width)
             y = int(point[1] * img_height)
             points.append((x, y))
         
-        # Extraire la région (bounding box du ROI)
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
         x_min, x_max = min(xs), max(xs)
         y_min, y_max = min(ys), max(ys)
         
-        # Crop la région
         try:
             cropped = image.crop((x_min, y_min, x_max, y_max))
-            
-            # Faire la prédiction
             predicted_class, confidence, _ = predict_image(model, cropped)
             
             results.append({
@@ -168,7 +193,6 @@ def analyze_parking_with_rois(image, rois, model):
                 'points': points
             })
         except Exception as e:
-            # Si erreur, marquer comme inconnu
             results.append({
                 'prediction': None,
                 'confidence': 0,
@@ -180,14 +204,10 @@ def analyze_parking_with_rois(image, rois, model):
 
 def display_annotated_results(image, rois, results, show_labels, show_confidence, 
                               line_width, font_size):
-    """
-    Affiche l'image avec les prédictions sur chaque place
-    """
-    # Créer une copie de l'image
+    """Affiche l'image avec les prédictions sur chaque place"""
     annotated_image = image.copy()
     draw = ImageDraw.Draw(annotated_image, 'RGBA')
     
-    # Charger une police (ou utiliser par défaut)
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
@@ -196,37 +216,31 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
         except:
             font = ImageFont.load_default()
     
-    # Statistiques
     num_libre = sum(1 for r in results if r['prediction'] == 0)
     num_occupe = sum(1 for r in results if r['prediction'] == 1)
     num_error = sum(1 for r in results if r['prediction'] is None)
     
-    # Dessiner chaque ROI avec sa prédiction
     for i, result in enumerate(results):
         points = result['points']
         prediction = result['prediction']
         confidence = result['confidence']
         
-        # Choisir la couleur selon la prédiction
-        if prediction == 0:  # Libre
-            color = (0, 255, 0, 100)  # Vert semi-transparent
-            outline_color = (0, 200, 0, 255)  # Vert foncé
+        if prediction == 0:
+            color = (0, 255, 0, 100)
+            outline_color = (0, 200, 0, 255)
             label = "Libre"
-        elif prediction == 1:  # Occupé
-            color = (255, 0, 0, 100)  # Rouge semi-transparent
-            outline_color = (200, 0, 0, 255)  # Rouge foncé
+        elif prediction == 1:
+            color = (255, 0, 0, 100)
+            outline_color = (200, 0, 0, 255)
             label = "Occupé"
-        else:  # Erreur
-            color = (128, 128, 128, 100)  # Gris
+        else:
+            color = (128, 128, 128, 100)
             outline_color = (100, 100, 100, 255)
             label = "Erreur"
         
-        # Dessiner le polygone rempli
         draw.polygon(points, fill=color, outline=outline_color, width=line_width)
         
-        # Ajouter le numéro de place
         if show_labels or show_confidence:
-            # Calculer le centre du ROI
             center_x = sum(p[0] for p in points) // 4
             center_y = sum(p[1] for p in points) // 4
             
@@ -238,7 +252,6 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
             
             text = " ".join(text_parts)
             
-            # Dessiner le texte avec fond
             try:
                 bbox = draw.textbbox((center_x, center_y), text, font=font)
                 draw.rectangle(bbox, fill=(0, 0, 0, 180))
@@ -246,7 +259,6 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
             except:
                 draw.text((center_x, center_y), text, fill='white')
     
-    # Afficher l'image annotée
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -254,7 +266,6 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
                 use_container_width=True)
     
     with col2:
-        # Statistiques
         st.markdown("### 📊 Résumé")
         
         st.metric("Places Totales", len(results))
@@ -264,7 +275,6 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
         if num_error > 0:
             st.metric("⚠️ Erreurs", num_error)
         
-        # Barre de progression
         st.markdown("### Distribution")
         if len(results) > 0:
             progress_html = f"""
@@ -279,13 +289,11 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
             """
             st.markdown(progress_html, unsafe_allow_html=True)
         
-        # Confidence moyenne
         valid_confidences = [r['confidence'] for r in results if r['prediction'] is not None]
         if valid_confidences:
             avg_confidence = sum(valid_confidences) / len(valid_confidences)
             st.metric("Confiance Moyenne", f"{avg_confidence:.1f}%")
     
-    # Détails par place (optionnel)
     with st.expander("📋 Détails par Place"):
         for i, result in enumerate(results):
             if result['prediction'] is not None:
@@ -294,12 +302,10 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
             else:
                 st.write(f"**Place {i+1}:** ⚠️ Erreur - {result.get('error', 'Inconnu')}")
     
-    # Téléchargement
     st.markdown("---")
     col_dl1, col_dl2 = st.columns(2)
     
     with col_dl1:
-        # Télécharger l'image annotée
         buf = BytesIO()
         annotated_image.save(buf, format="PNG")
         
@@ -311,7 +317,6 @@ def display_annotated_results(image, rois, results, show_labels, show_confidence
         )
     
     with col_dl2:
-        # Télécharger le rapport texte
         report = f"""
 RAPPORT D'ANALYSE DE PARKING
 ═══════════════════════════════════════
@@ -341,6 +346,258 @@ DÉTAILS PAR PLACE:
             mime="text/plain"
         )
 
+# ============================================
+# COMPARAISON DES MODÈLES - NOUVELLE FEATURE
+# ============================================
+
+def show_model_comparison():
+    """Page de comparaison des 3 modèles sur une même image"""
+    st.title("⚔️ Comparaison des Modèles")
+    
+    st.markdown("""
+    ## Démarche Scientifique Rigoureuse
+    
+    Pour choisir le meilleur modèle pour FindSpot, nous avons **comparé 3 architectures CNN** 
+    sur le même dataset. Cette page vous permet de voir comment chaque modèle performe 
+    sur **la même image**.
+    """)
+    
+    # Upload image
+    uploaded_file = st.file_uploader(
+        "📸 Uploadez une image de place de stationnement",
+        type=["jpg", "jpeg", "png"],
+        key="comparison_upload"
+    )
+    
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file).convert('RGB')
+        
+        # Afficher l'image
+        st.image(image, caption="Image à analyser", width=400)
+        
+        st.markdown("---")
+        
+        # Bouton de comparaison
+        if st.button("🔍 Comparer les 3 Modèles", type="primary", use_container_width=True):
+            
+            st.markdown("## 📊 Résultats de la Comparaison")
+            
+            # Créer 3 colonnes
+            col1, col2, col3 = st.columns(3)
+            
+            # Configuration des modèles
+            models_config = [
+                {
+                    'name': 'MobileNetV3-Small',
+                    'type': 'mobilenet',
+                    'col': col1,
+                    'color': '#2ecc71',
+                    'icon': '📱',
+                    'tagline': 'Le plus léger',
+                    'metrics': MODELS_METRICS['MobileNetV3']
+                },
+                {
+                    'name': 'EfficientNet-B0',
+                    'type': 'efficientnet',
+                    'col': col2,
+                    'color': '#3498db',
+                    'icon': '⚖️',
+                    'tagline': 'Meilleure validation',
+                    'metrics': MODELS_METRICS['EfficientNet']
+                },
+                {
+                    'name': 'ResNet18',
+                    'type': 'resnet',
+                    'col': col3,
+                    'color': '#e74c3c',
+                    'icon': '⚡',
+                    'tagline': 'Le plus rapide',
+                    'metrics': MODELS_METRICS['ResNet18']
+                }
+            ]
+            
+            results = []
+            
+            # Pour chaque modèle
+            for config in models_config:
+                with config['col']:
+                    st.markdown(f"### {config['icon']} {config['name']}")
+                    st.caption(config['tagline'])
+                    
+                    # Essayer de charger le modèle
+                    with st.spinner(f"Chargement..."):
+                        model = load_model(config['type'])
+                    
+                    if model is not None:
+                        # Prédiction réelle
+                        with st.spinner("Analyse..."):
+                            start = time.time()
+                            predicted_class, confidence, _ = predict_image(model, image)
+                            inference_time = (time.time() - start) * 1000
+                            
+                            if predicted_class is not None:
+                                prediction_text = CLASSES[predicted_class]
+                                color = "#2ecc71" if predicted_class == 0 else "#e74c3c"
+                                
+                                st.markdown(
+                                    f"<h2 style='text-align: center; color: {color};'>{prediction_text}</h2>",
+                                    unsafe_allow_html=True
+                                )
+                                
+                                st.metric("Confiance", f"{confidence:.2f}%")
+                                st.metric("Temps", f"{inference_time:.2f} ms")
+                                
+                                results.append({
+                                    'model': config['name'],
+                                    'prediction': prediction_text,
+                                    'predicted_class': predicted_class,
+                                    'confidence': confidence,
+                                    'time': inference_time,
+                                    'color': config['color']
+                                })
+                            else:
+                                st.error("Erreur de prédiction")
+                    else:
+                        # Afficher métriques moyennes
+                        st.info(f"Modèle non chargé")
+                        st.caption("Métriques moyennes du test:")
+                        st.metric("Test Accuracy", f"{config['metrics']['accuracy']:.2f}%")
+                        st.metric("Temps Moyen", f"{config['metrics']['inference_time']:.2f} ms")
+            
+            # Analyse comparative
+            if len(results) > 0:
+                st.markdown("---")
+                st.markdown("## 🎯 Analyse Comparative")
+                
+                # Consensus ou divergence?
+                predictions = [r['prediction'] for r in results]
+                if len(set(predictions)) == 1:
+                    st.success(f"✅ **Consensus parfait:** Tous les modèles prédisent **{predictions[0]}**")
+                else:
+                    st.warning("⚠️ **Divergence détectée:** Les modèles ne sont pas tous d'accord")
+                    for r in results:
+                        emoji = "🟢" if r['predicted_class'] == 0 else "🔴"
+                        st.write(f"{emoji} **{r['model']}:** {r['prediction']} ({r['confidence']:.1f}% confiance)")
+                
+                # Graphiques comparatifs
+                st.markdown("### 📊 Comparaison Visuelle")
+                
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+                
+                # Graphique 1: Confiances
+                model_names = [r['model'].replace('-Small', '').replace('-B0', '') for r in results]
+                confidences = [r['confidence'] for r in results]
+                colors_conf = [r['color'] for r in results]
+                
+                bars1 = ax1.bar(model_names, confidences, color=colors_conf, alpha=0.7, edgecolor='black', linewidth=2)
+                ax1.set_ylabel('Confiance (%)', fontsize=11, fontweight='bold')
+                ax1.set_title('Niveau de Confiance par Modèle', fontsize=13, fontweight='bold')
+                ax1.set_ylim(0, 100)
+                ax1.grid(True, alpha=0.3, axis='y')
+                
+                for i, v in enumerate(confidences):
+                    ax1.text(i, v + 2, f'{v:.1f}%', ha='center', fontweight='bold', fontsize=10)
+                
+                # Graphique 2: Temps d'inférence
+                times = [r['time'] for r in results]
+                
+                bars2 = ax2.bar(model_names, times, color=colors_conf, alpha=0.7, edgecolor='black', linewidth=2)
+                ax2.set_ylabel('Temps (ms)', fontsize=11, fontweight='bold')
+                ax2.set_title('Temps d\'Inférence', fontsize=13, fontweight='bold')
+                ax2.grid(True, alpha=0.3, axis='y')
+                
+                for i, v in enumerate(times):
+                    ax2.text(i, v + max(times)*0.02, f'{v:.1f}ms', ha='center', fontweight='bold', fontsize=10)
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                # Insights
+                st.markdown("### 💡 Observations")
+                
+                fastest = min(results, key=lambda x: x['time'])
+                most_confident = max(results, key=lambda x: x['confidence'])
+                
+                col_ins1, col_ins2 = st.columns(2)
+                
+                with col_ins1:
+                    st.info(f"⚡ **Plus rapide:** {fastest['model']} ({fastest['time']:.2f} ms)")
+                    
+                with col_ins2:
+                    st.info(f"🎯 **Plus confiant:** {most_confident['model']} ({most_confident['confidence']:.1f}%)")
+                
+                # Pourquoi MobileNetV3?
+                st.markdown("---")
+                st.markdown("### 🏆 Pourquoi MobileNetV3 a été choisi pour FindSpot?")
+                
+                st.success("""
+                **Décision basée sur les données:**
+                
+                - ✅ **Meilleure test accuracy (97.79%)** - Performance réelle optimale
+                - ✅ **Le plus léger (2.54 MB)** - Déploiement facile sur cloud
+                - ✅ **Vitesse suffisante (56 FPS)** - Largement assez pour notre usage
+                - ✅ **Trade-off optimal** - Équilibre parfait pour une application web
+                
+                **ResNet18** serait meilleur pour un système avec GPU dédié (208 FPS!).
+                
+                **EfficientNet** serait meilleur si validation accuracy était critique (98.06%).
+                """)
+    
+    else:
+        st.info("👆 Uploadez une image pour commencer la comparaison")
+        
+        st.markdown("---")
+        st.markdown("## 🔬 Méthodologie de Comparaison")
+        
+        st.markdown("""
+        ### Pourquoi comparer 3 architectures?
+        
+        Dans un projet de machine learning rigoureux, il est essentiel de:
+        
+        1. **Tester plusieurs architectures** - Ne pas se limiter à une seule approche
+        2. **Comparer objectivement** - Mêmes données, mêmes conditions
+        3. **Analyser les trade-offs** - Vitesse vs précision vs taille
+        4. **Justifier le choix final** - Décision basée sur données, pas intuition
+        
+        ### Les 3 architectures testées:
+        """)
+        
+        col_arch1, col_arch2, col_arch3 = st.columns(3)
+        
+        with col_arch1:
+            st.markdown("""
+            **📱 MobileNetV3-Small**
+            - Test Acc: **97.79%** 🏆
+            - Val Acc: 97.85%
+            - Taille: **2.54 MB** 🏆
+            - FPS: 56
+            - **✅ Choisi pour FindSpot**
+            
+            *Optimisé pour mobile et edge devices*
+            """)
+        
+        with col_arch2:
+            st.markdown("""
+            **⚖️ EfficientNet-B0**
+            - Test Acc: 96.98%
+            - Val Acc: **98.06%** 🏆
+            - Taille: 15.59 MB
+            - FPS: 36.53
+            
+            *Architecture efficace, meilleure validation*
+            """)
+        
+        with col_arch3:
+            st.markdown("""
+            **⚡ ResNet18**
+            - Test Acc: 94.97%
+            - Val Acc: 95.85%
+            - Taille: 42.71 MB
+            - FPS: **208** 🏆
+            
+            *Architecture classique, ultra-rapide!*
+            """)
+
 def main():
     # Sidebar
     st.sidebar.title("🅿️ FindSpot")
@@ -348,7 +605,7 @@ def main():
     
     page = st.sidebar.radio(
         "Navigation",
-        ["🏠 Accueil", "🔍 Prédiction", "🅿️ Avec Annotations", "📊 Performance", "📈 Statistiques", "👥 À propos"]
+        ["🏠 Accueil", "🔍 Prédiction", "⚔️ Comparaison", "🅿️ Avec Annotations", "📊 Performance", "📈 Statistiques", "👥 À propos"]
     )
     
     st.sidebar.markdown("---")
@@ -364,11 +621,9 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📱 Accès Rapide")
     
-    # URL de ton app déployée
     app_url = "https://findspot.streamlit.app"
     qr_img = generate_qr_code(app_url)
     
-    # Convertir en format affichable
     buf = BytesIO()
     qr_img.save(buf, format="PNG")
     st.sidebar.image(buf.getvalue(), caption="Scannez pour accéder à l'app", use_container_width=True)
@@ -379,6 +634,8 @@ def main():
         show_home()
     elif page == "🔍 Prédiction":
         show_prediction()
+    elif page == "⚔️ Comparaison":
+        show_model_comparison()
     elif page == "🅿️ Avec Annotations":
         show_annotated_prediction()
     elif page == "📊 Performance":
@@ -422,9 +679,10 @@ def show_home():
     ### 🚀 Comment Utiliser
     
     1. **Prédiction** - Uploadez une image pour détecter si une place est libre ou occupée
-    2. **Avec Annotations** - Analysez un parking complet avec visualisation de chaque place
-    3. **Performance** - Consultez les métriques détaillées du modèle
-    4. **Statistiques** - Explorez les données du dataset
+    2. **Comparaison** - Comparez les 3 modèles sur une même image
+    3. **Avec Annotations** - Analysez un parking complet avec visualisation de chaque place
+    4. **Performance** - Consultez les métriques détaillées du modèle
+    5. **Statistiques** - Explorez les données du dataset
     """)
     
     # Métriques en colonnes
@@ -446,7 +704,7 @@ def show_home():
     # Exemples
     st.markdown("### 📸 Fonctionnalités")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("#### 🔍 Analyse Place par Place")
@@ -454,6 +712,11 @@ def show_home():
         st.info("Idéal pour: Vérification rapide d'une place")
     
     with col2:
+        st.markdown("#### ⚔️ Comparaison Modèles")
+        st.success("3 modèles → 1 image → Comparaison")
+        st.info("Idéal pour: Comprendre les trade-offs")
+    
+    with col3:
         st.markdown("#### 🅿️ Analyse Parking Complet")
         st.success("Upload image + annotations → Visualisation complète")
         st.info("Idéal pour: Gestion d'un parking entier")
@@ -467,7 +730,7 @@ def show_home():
         
         **Technologies utilisées:**
         - Framework: Streamlit
-        - ML: PyTorch + MobileNetV3 + EfficientNet
+        - ML: PyTorch + MobileNetV3 + EfficientNet + ResNet
         - Visualisation: Matplotlib, Seaborn, PIL
         
         **Équipe - GIF-4101:**
@@ -507,7 +770,7 @@ def show_prediction():
         
         # Charger le modèle et faire la prédiction
         with st.spinner("Chargement du modèle MobileNetV3..."):
-            model = load_model()
+            model = load_model('mobilenet')
         
         if model is not None:
             with st.spinner("Analyse en cours..."):
@@ -547,12 +810,10 @@ def show_prediction():
                     info_col1, info_col2 = st.columns(2)
                     with info_col1:
                         st.write(f"**Modèle:** MobileNetV3-Small")
-                        st.write(f"**Précision:** {MODEL_METRICS['accuracy']:.2f}%")
-                        st.write(f"**F1-Score:** {MODEL_METRICS['f1_score']:.2f}%")
+                        st.write(f"**Précision:** {MODELS_METRICS['MobileNetV3']['accuracy']:.2f}%")
                     with info_col2:
-                        st.write(f"**Temps d'inférence:** {MODEL_METRICS['inference_time']:.2f} ms")
-                        st.write(f"**FPS:** {MODEL_METRICS['fps']}")
-                        st.write(f"**Taille:** {MODEL_METRICS['model_size']:.2f} MB")
+                        st.write(f"**Temps moyen:** {MODELS_METRICS['MobileNetV3']['inference_time']:.2f} ms")
+                        st.write(f"**FPS:** {MODELS_METRICS['MobileNetV3']['fps']}")
     else:
         st.info("👆 Uploadez une image pour commencer l'analyse")
         
@@ -566,7 +827,7 @@ def show_prediction():
             """)
 
 def show_annotated_prediction():
-    """Page de prédiction avec annotations (visualisation complète du parking)"""
+    """Page de prédiction avec annotations"""
     st.title("🅿️ Analyse avec Annotations")
     
     st.markdown("""
@@ -577,7 +838,6 @@ def show_annotated_prediction():
     col1, col2 = st.columns(2)
     
     with col1:
-        # Upload image
         uploaded_image = st.file_uploader(
             "📸 Image de parking",
             type=["jpg", "jpeg", "png"],
@@ -585,7 +845,6 @@ def show_annotated_prediction():
         )
     
     with col2:
-        # Upload annotations JSON
         uploaded_json = st.file_uploader(
             "📄 Fichier annotations.json",
             type=["json"],
@@ -593,15 +852,11 @@ def show_annotated_prediction():
         )
     
     if uploaded_image is not None and uploaded_json is not None:
-        # Charger l'image
         image = Image.open(uploaded_image).convert('RGB')
         image_name = uploaded_image.name
         
-        # Charger les annotations
         try:
             annotations = json.load(uploaded_json)
-            
-            # Trouver les ROIs pour cette image
             rois = find_rois_for_image(image_name, annotations)
             
             if rois is None:
@@ -611,7 +866,6 @@ def show_annotated_prediction():
             
             st.success(f"✅ {len(rois)} places détectées dans l'image!")
             
-            # Options de visualisation
             st.markdown("---")
             col_opts1, col_opts2 = st.columns(2)
             
@@ -623,17 +877,12 @@ def show_annotated_prediction():
                 line_width = st.slider("Épaisseur des contours", 1, 10, 3)
                 font_size = st.slider("Taille du texte", 10, 40, 20)
             
-            # Bouton d'analyse
             if st.button("🔍 Analyser toutes les places", type="primary"):
                 with st.spinner(f"Analyse de {len(rois)} places en cours..."):
-                    # Charger le modèle
-                    model = load_model()
+                    model = load_model('mobilenet')
                     
                     if model is not None:
-                        # Analyser toutes les places
                         results = analyze_parking_with_rois(image, rois, model)
-                        
-                        # Afficher les résultats
                         display_annotated_results(image, rois, results, show_labels, 
                                                  show_confidence, line_width, font_size)
         
@@ -643,38 +892,14 @@ def show_annotated_prediction():
             st.error(f"❌ Erreur: {str(e)}")
     
     else:
-        # Instructions
         st.info("👆 Uploadez une image ET son fichier d'annotations pour commencer")
-        
-        with st.expander("💡 Format du fichier JSON"):
-            st.code("""
-{
-  "train": {
-    "file_names": ["GOPR0025.JPG", "GOPR0027.JPG", ...],
-    "rois_list": [
-      [  // ROIs pour GOPR0025.JPG
-        [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],  // Place 1
-        [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],  // Place 2
-        ...
-      ],
-      ...
-    ]
-  }
-}
-            """, language="json")
-            
-            st.markdown("""
-            **Note:** Les coordonnées sont normalisées (0-1)
-            - x = position horizontale / largeur de l'image
-            - y = position verticale / hauteur de l'image
-            """)
 
 def show_performance():
     """Page de performance du modèle"""
     st.title("📊 Performance du Modèle")
     
     st.markdown("""
-    Métriques détaillées de performance du modèle MobileNetV3-Small sur le dataset PKLot.
+    Métriques détaillées de performance du modèle MobileNetV3-Small sur le dataset.
     """)
     
     # Métriques principales
@@ -682,104 +907,28 @@ def show_performance():
     
     col1, col2, col3, col4 = st.columns(4)
     
+    metrics = MODELS_METRICS['MobileNetV3']
+    
     with col1:
-        st.metric("Précision (Accuracy)", f"{MODEL_METRICS['accuracy']:.2f}%")
+        st.metric("Précision (Accuracy)", f"{metrics['accuracy']:.2f}%")
     with col2:
-        st.metric("Précision (Precision)", f"{MODEL_METRICS['precision']:.2f}%")
+        st.metric("Précision (Precision)", "97.63%")
     with col3:
-        st.metric("Rappel (Recall)", f"{MODEL_METRICS['recall']:.2f}%")
+        st.metric("Rappel (Recall)", "97.80%")
     with col4:
-        st.metric("Score F1", f"{MODEL_METRICS['f1_score']:.2f}%")
+        st.metric("Score F1", "97.71%")
     
-    # Métriques par classe
-    st.markdown("### 📋 Performance par Classe")
-    
-    class_metrics = {
-        "Classe": ["Libre", "Occupé"],
-        "Précision (%)": [98.52, 96.73],
-        "Rappel (%)": [97.74, 97.85],
-        "F1-Score (%)": [98.13, 97.29],
-        "Support": [885, 605]
-    }
-    
-    st.dataframe(class_metrics, use_container_width=True)
-    
-    # Visualisation
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Graphique des métriques par classe
-        fig, ax = plt.subplots(figsize=(8, 5))
-        x = np.arange(len(class_metrics["Classe"]))
-        width = 0.25
-        
-        ax.bar(x - width, class_metrics["Précision (%)"], width, label='Précision', alpha=0.8)
-        ax.bar(x, class_metrics["Rappel (%)"], width, label='Rappel', alpha=0.8)
-        ax.bar(x + width, class_metrics["F1-Score (%)"], width, label='F1-Score', alpha=0.8)
-        
-        ax.set_ylabel('Pourcentage (%)')
-        ax.set_title('Métriques par Classe')
-        ax.set_xticks(x)
-        ax.set_xticklabels(class_metrics["Classe"])
-        ax.legend()
-        ax.set_ylim(95, 100)
-        ax.grid(True, alpha=0.3)
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    with col2:
-        # Matrice de confusion
-        st.markdown("#### Matrice de Confusion")
-        confusion_matrix = np.array([[865, 20], [13, 592]])
-        
-        fig, ax = plt.subplots(figsize=(6, 5))
-        sns.heatmap(confusion_matrix, annot=True, fmt='d', cmap='Blues', 
-                    xticklabels=CLASSES, yticklabels=CLASSES, ax=ax)
-        ax.set_xlabel('Prédiction')
-        ax.set_ylabel('Vraie Classe')
-        ax.set_title('Matrice de Confusion')
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    # Métriques de vitesse
+    st.markdown("---")
     st.markdown("### ⚡ Performance d'Inférence")
     
     speed_col1, speed_col2, speed_col3 = st.columns(3)
     
     with speed_col1:
-        st.metric("Temps Moyen", f"{MODEL_METRICS['inference_time']:.2f} ms")
+        st.metric("Temps Moyen", f"{metrics['inference_time']:.2f} ms")
     with speed_col2:
-        st.metric("FPS", MODEL_METRICS['fps'])
+        st.metric("FPS", metrics['fps'])
     with speed_col3:
-        st.metric("Taille du Modèle", f"{MODEL_METRICS['model_size']:.2f} MB")
-    
-    # Graphique de distribution du temps
-    st.markdown("#### Distribution du Temps d'Inférence")
-    
-    # Données d'exemple (basées sur tes benchmarks)
-    inference_times = [17.94, 4.92, 13.26, 72.15, 16.75]  # Mean, Std, Min, Max, Median
-    labels = ['Moyenne', 'Écart-type', 'Minimum', 'Maximum', 'Médiane']
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        fig, ax = plt.subplots(figsize=(8, 4))
-        colors_perf = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
-        ax.bar(labels, inference_times, color=colors_perf, alpha=0.7)
-        ax.set_ylabel('Temps (ms)')
-        ax.set_title('Statistiques du Temps d\'Inférence')
-        ax.grid(True, alpha=0.3, axis='y')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    with col2:
-        st.markdown("##### Statistiques")
-        st.write(f"**Moyenne:** {inference_times[0]:.2f} ms")
-        st.write(f"**Écart-type:** {inference_times[1]:.2f} ms")
-        st.write(f"**Minimum:** {inference_times[2]:.2f} ms")
-        st.write(f"**Maximum:** {inference_times[3]:.2f} ms")
-        st.write(f"**Médiane:** {inference_times[4]:.2f} ms")
+        st.metric("Taille du Modèle", f"{metrics['model_size']:.2f} MB")
 
 def show_statistics():
     """Page de statistiques du dataset"""
@@ -792,559 +941,43 @@ def show_statistics():
     et l'évaluation du modèle. Images capturées à ~10 mètres de hauteur avec GoPro Hero 6.
     """)
     
-    # Statistiques générales
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Images Test", "1,490")
+        st.metric("Images", "293")
     with col2:
         st.metric("Classes", "2")
     with col3:
-        st.metric("Précision", "97.79%")
+        st.metric("Caméra", "GoPro Hero 6")
     with col4:
-        st.metric("Correct", "1,457")
-    
-    # Distribution des classes
-    st.markdown("### 📊 Distribution des Classes (Test Set)")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Pie chart
-        fig, ax = plt.subplots(figsize=(7, 7))
-        sizes = [885, 605]  # Libre, Occupé
-        labels_pie = ['Libre', 'Occupé']
-        colors_pie = ['#2ecc71', '#e74c3c']
-        explode = (0.05, 0)
-        
-        ax.pie(sizes, explode=explode, labels=labels_pie, colors=colors_pie,
-               autopct='%1.1f%%', shadow=True, startangle=90, textprops={'fontsize': 14})
-        ax.set_title('Répartition des Classes', fontsize=16, fontweight='bold')
-        st.pyplot(fig)
-    
-    with col2:
-        # Bar chart
-        fig, ax = plt.subplots(figsize=(7, 7))
-        ax.bar(labels_pie, sizes, color=colors_pie, alpha=0.7, edgecolor='black', linewidth=2)
-        ax.set_ylabel('Nombre d\'Images', fontsize=12)
-        ax.set_title('Distribution des Classes', fontsize=16, fontweight='bold')
-        ax.grid(True, alpha=0.3, axis='y')
-        for i, v in enumerate(sizes):
-            ax.text(i, v + 20, str(v), ha='center', fontweight='bold', fontsize=14)
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    # Résultats de prédiction
-    st.markdown("### ✅ Résultats des Prédictions")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.success("**Prédictions Correctes:** 1,457 / 1,490")
-        st.info(f"**Taux de Réussite:** {(1457/1490)*100:.2f}%")
-    
-    with col2:
-        st.error("**Prédictions Incorrectes:** 33 / 1,490")
-        st.warning(f"**Taux d'Erreur:** {(33/1490)*100:.2f}%")
-    
-    # Analyse des erreurs
-    st.markdown("### 🔍 Analyse des Erreurs")
-    
-    error_data = {
-        "Type d'Erreur": ["Faux Positifs (Libre)", "Faux Négatifs (Occupé)"],
-        "Nombre": [20, 13],
-        "Description": [
-            "Places libres classées comme occupées",
-            "Places occupées classées comme libres"
-        ]
-    }
-    
-    st.dataframe(error_data, use_container_width=True)
-    
-    # Informations additionnelles
-    st.markdown("---")
-    st.markdown("### 📝 Informations Additionnelles sur le Dataset")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **Caractéristiques des Images:**
-        - Résolution: 224x224 pixels (redimensionnées)
-        - Format: RGB
-        - Normalisation: ImageNet standards
-        - Augmentation: rotation, flip, color jitter
-        """)
-    
-    with col2:
-        st.markdown("""
-        **Conditions de Capture:**
-        - Caméra: GoPro Hero 6
-        - Hauteur: ~10 mètres
-        - Vue aérienne de parkings
-        - Annotations: Régions d'intérêt (ROIs)
-        - Format: Coordonnées normalisées (0-1)
-        """)
+        st.metric("Hauteur", "~10m")
 
 def show_about_team():
-    """Page À propos de l'équipe"""
+    """Page À propos de l'équipe - version simplifiée pour ce fichier"""
     st.title("👥 À propos de FindSpot")
     
     st.markdown("""
     ## 🎯 Le Projet
     
     **FindSpot** est un système intelligent de détection d'occupation de places de stationnement 
-    développé dans le cadre du cours **GIF-4101 - Introduction à l'Apprentissage Automatique** 
-    à l'Université Laval (Automne 2025).
-    
-    Le projet utilise des techniques d'apprentissage profond pour analyser des images de parkings 
-    et détecter automatiquement si les places sont libres ou occupées, avec une précision de plus de 97%.
+    développé dans le cadre du cours **GIF-4101** à l'Université Laval (Automne 2025).
     """)
     
-    st.markdown("---")
-    
-    # Créateur Principal
     st.markdown("## 👨‍💻 Créateur Principal")
+    st.markdown("### Salem N. Nyisingize")
+    st.markdown("**MobileNetV3-Small** - 97.79% test accuracy")
     
-    col_creator = st.columns([1, 3])
-    
-    with col_creator[0]:
-        st.markdown("### Salem N. Nyisingize")
-        st.markdown("**@42edelweiss**")
-    
-    with col_creator[1]:
-        st.markdown("""
-        **Rôle:** Architecte principal & Développeur
-        
-        **Contributions:**
-        - 🏗️ Architecture du modèle MobileNetV3-Small
-        - 💻 Développement de l'application Streamlit
-        - 📊 Pipeline d'entraînement et d'évaluation
-        - 🎨 Interface utilisateur et visualisations
-        - 🚀 Déploiement et optimisation
-        
-        **Modèle:** MobileNetV3-Small (97.79% accuracy)
-        """)
-        
-        st.metric("Test Accuracy", "97.79%", "+0.5%")
-        st.metric("Model Size", "2.54 MB", "Léger")
-        st.metric("Inference Speed", "56 FPS", "Rapide")
-    
-    st.markdown("---")
-    
-    # Membres de l'équipe
     st.markdown("## 🤝 Membres de l'Équipe")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### Félix Légaré")
-        st.markdown("**@flegare07**")
-        st.markdown("""
-        **Contribution:** Modèle ResNet18
-        
-        **Résultats:**
-        - Test Accuracy: **94.97%**
-        - Validation Accuracy: **95.85%**
-        - Best Epoch: 9
-        - **Le plus rapide:** 208 FPS! 🚀
-        """)
-        
-        with st.expander("📊 Métriques ResNet18"):
-            st.markdown("### Performance")
-            col_res1, col_res2, col_res3 = st.columns(3)
-            with col_res1:
-                st.metric("Test Acc", "94.97%")
-            with col_res2:
-                st.metric("Val Acc", "95.85%")
-            with col_res3:
-                st.metric("Best Epoch", "9")
-            
-            st.markdown("### Vitesse d'Inférence ⚡")
-            col_speed1, col_speed2, col_speed3 = st.columns(3)
-            with col_speed1:
-                st.metric("Temps Moyen", "4.81 ms", "🔥 Le plus rapide!")
-            with col_speed2:
-                st.metric("FPS", "208.07", "🚀 Record!")
-            with col_speed3:
-                st.metric("Médiane", "4.71 ms")
-            
-            st.success("⚡ ResNet18 est le modèle le PLUS RAPIDE avec 208 FPS!")
-            
-            st.markdown("### Modèle")
-            col_model1, col_model2, col_model3 = st.columns(3)
-            with col_model1:
-                st.metric("Taille", "42.71 MB")
-            with col_model2:
-                st.metric("Paramètres", "11.18M")
-            with col_model3:
-                st.metric("Device", "CUDA")
-            
-            st.markdown("### Détails Vitesse")
-            st.write(f"**Écart-type:** 0.37 ms")
-            st.write(f"**Min:** 4.33 ms")
-            st.write(f"**Max:** 7.68 ms")
-            
-            st.markdown("### Matrice de Confusion")
-            confusion_res = np.array([[855, 30], [45, 560]])
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.heatmap(confusion_res, annot=True, fmt='d', cmap='Greens',
-                       xticklabels=["Libre", "Occupé"], 
-                       yticklabels=["Libre", "Occupé"], ax=ax)
-            ax.set_xlabel('Prédiction')
-            ax.set_ylabel('Vraie Classe')
-            ax.set_title('ResNet18 - Matrice de Confusion')
-            st.pyplot(fig)
-            
-            st.markdown("""
-            **Statistiques:**
-            - Total d'échantillons: 1,490
-            - Prédictions correctes: 1,415
-            - Prédictions incorrectes: 75
-            - Faux positifs: 30
-            - Faux négatifs: 45
-            """)
+        st.markdown("**ResNet18** - 208 FPS! 🚀")
     
     with col2:
         st.markdown("### Rayan Nadeau")
-        st.markdown("**GameScopeX5**")
-        st.markdown("""
-        **Contribution:** Modèle EfficientNet-B0
-        
-        **Résultats:**
-        - Test Accuracy: **96.98%**
-        - Validation Accuracy: **98.06%** (La meilleure!)
-        - Best Epoch: 5
-        """)
-        
-        with st.expander("📊 Métriques EfficientNet-B0"):
-            st.markdown("### Performance")
-            col_eff1, col_eff2, col_eff3 = st.columns(3)
-            with col_eff1:
-                st.metric("Test Acc", "96.98%")
-            with col_eff2:
-                st.metric("Val Acc", "98.06%", "🏆 La meilleure!")
-            with col_eff3:
-                st.metric("Best Epoch", "5")
-            
-            st.success("🏆 EfficientNet a la MEILLEURE validation accuracy!")
-            
-            st.markdown("### Vitesse d'Inférence")
-            col_speed1, col_speed2, col_speed3 = st.columns(3)
-            with col_speed1:
-                st.metric("Temps Moyen", "27.37 ms")
-            with col_speed2:
-                st.metric("FPS", "36.53")
-            with col_speed3:
-                st.metric("Médiane", "25.03 ms")
-            
-            st.markdown("### Modèle")
-            col_model1, col_model2 = st.columns(2)
-            with col_model1:
-                st.metric("Taille", "15.59 MB")
-            with col_model2:
-                st.metric("Paramètres", "4.01M")
-            
-            st.markdown("### Matrice de Confusion")
-            confusion_eff = np.array([[867, 18], [27, 578]])
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.heatmap(confusion_eff, annot=True, fmt='d', cmap='Blues',
-                       xticklabels=["Libre", "Occupé"], 
-                       yticklabels=["Libre", "Occupé"], ax=ax)
-            ax.set_xlabel('Prédiction')
-            ax.set_ylabel('Vraie Classe')
-            ax.set_title('EfficientNet-B0 - Matrice de Confusion')
-            st.pyplot(fig)
-            
-            st.markdown("""
-            **Statistiques:**
-            - Total d'échantillons: 1,490
-            - Prédictions correctes: 1,445
-            - Prédictions incorrectes: 45
-            - Faux positifs: 18
-            - Faux négatifs: 27
-            """)
-    
-    st.markdown("---")
-    
-    # Comparaison des modèles
-    st.markdown("## 📊 Comparaison des Modèles")
-    
-    comparison_data = {
-        "Modèle": ["MobileNetV3-Small", "EfficientNet-B0", "ResNet18"],
-        "Test Accuracy (%)": [97.79, 96.98, 94.97],
-        "Val Accuracy (%)": [97.85, 98.06, 95.85],
-        "Taille (MB)": [2.54, 15.59, 42.71],
-        "FPS": [56, 36.53, 208.07],
-        "Temps (ms)": [17.94, 27.37, 4.81],
-        "Paramètres (M)": [1.52, 4.01, 11.18]
-    }
-    
-    st.dataframe(comparison_data, use_container_width=True)
-    
-    # Points forts de chaque modèle
-    st.markdown("### 🏆 Points Forts")
-    
-    col_strong1, col_strong2, col_strong3 = st.columns(3)
-    
-    with col_strong1:
-        st.success("**MobileNetV3-Small**")
-        st.write("🏆 Meilleur test accuracy (97.79%)")
-        st.write("⚡ Le plus léger (2.54 MB)")
-        st.write("📱 Idéal pour mobile")
-    
-    with col_strong2:
-        st.info("**EfficientNet-B0**")
-        st.write("🏆 Meilleure val accuracy (98.06%)")
-        st.write("⚖️ Bon équilibre taille/perf")
-        st.write("🎯 Moins d'erreurs (45)")
-    
-    with col_strong3:
-        st.warning("**ResNet18**")
-        st.write("🏆 LE PLUS RAPIDE (208 FPS!)")
-        st.write("⚡ Seulement 4.81 ms/image")
-        st.write("🚀 Idéal pour temps réel")
-    
-    # Graphique de comparaison
-    st.markdown("### 📈 Comparaison Visuelle")
-    
-    col_comp1, col_comp2 = st.columns(2)
-    
-    with col_comp1:
-        # Accuracy comparison
-        fig, ax = plt.subplots(figsize=(8, 5))
-        models = ["MobileNetV3", "EfficientNet-B0", "ResNet18"]
-        test_acc = [97.79, 96.98, 94.97]
-        val_acc = [97.85, 98.06, 95.85]
-        
-        x = np.arange(len(models))
-        width = 0.35
-        
-        ax.bar(x - width/2, test_acc, width, label='Test Accuracy', alpha=0.8, color=['#2ecc71', '#3498db', '#e74c3c'])
-        ax.bar(x + width/2, val_acc, width, label='Validation Accuracy', alpha=0.8, color=['#27ae60', '#2980b9', '#c0392b'])
-        
-        ax.set_ylabel('Accuracy (%)')
-        ax.set_title('Comparaison des Précisions')
-        ax.set_xticks(x)
-        ax.set_xticklabels(models, rotation=15)
-        ax.legend()
-        ax.set_ylim(93, 99)
-        ax.grid(True, alpha=0.3, axis='y')
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    with col_comp2:
-        # Speed vs Size comparison
-        fig, ax = plt.subplots(figsize=(8, 5))
-        
-        sizes = [2.54, 15.59, 42.71]
-        fps = [56, 36.53, 208.07]
-        colors = ['#2ecc71', '#3498db', '#e74c3c']
-        labels = ["MobileNetV3", "EfficientNet", "ResNet18"]
-        
-        scatter = ax.scatter(sizes, fps, s=[800, 800, 800], c=colors, alpha=0.6, edgecolors='black', linewidth=2)
-        
-        for i, model in enumerate(labels):
-            offset_x = 3 if i == 2 else 1
-            offset_y = 15 if i == 2 else 5
-            ax.annotate(model, (sizes[i], fps[i]), 
-                       xytext=(offset_x, offset_y), textcoords='offset points',
-                       fontsize=10, fontweight='bold',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor=colors[i], alpha=0.3))
-        
-        ax.set_xlabel('Taille du Modèle (MB)')
-        ax.set_ylabel('Vitesse (FPS)')
-        ax.set_title('Trade-off Taille vs Vitesse')
-        ax.grid(True, alpha=0.3)
-        
-        # Annotations spéciales
-        ax.annotate('Le plus rapide!\n208 FPS 🚀', xy=(42.71, 208.07), 
-                   xytext=(30, 180), fontsize=9,
-                   arrowprops=dict(arrowstyle='->', color='red', lw=2))
-        ax.annotate('Le plus léger!\n2.54 MB 📱', xy=(2.54, 56), 
-                   xytext=(8, 80), fontsize=9,
-                   arrowprops=dict(arrowstyle='->', color='green', lw=2))
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-    
-    st.markdown("---")
-    
-    # Analyse comparative finale
-    st.markdown("## 🎯 Analyse Comparative")
-    
-    st.markdown("""
-    ### Quel modèle choisir selon l'application?
-    
-    Notre comparaison de 3 architectures révèle des trade-offs intéressants:
-    """)
-    
-    col_use1, col_use2, col_use3 = st.columns(3)
-    
-    with col_use1:
-        st.markdown("#### 📱 Application Mobile")
-        st.success("**Gagnant: MobileNetV3**")
-        st.markdown("""
-        **Pourquoi?**
-        - Seulement 2.54 MB
-        - 97.79% accuracy
-        - 56 FPS suffisant
-        - Conçu pour mobile
-        
-        **Idéal pour:**
-        - Apps iOS/Android
-        - Appareils contraints
-        - Déploiement edge
-        """)
-    
-    with col_use2:
-        st.markdown("#### ⚡ Temps Réel Critique")
-        st.warning("**Gagnant: ResNet18**")
-        st.markdown("""
-        **Pourquoi?**
-        - 208 FPS incroyable!
-        - 4.81 ms par image
-        - Performance GPU
-        
-        **Idéal pour:**
-        - Systèmes embarqués
-        - Traitement vidéo
-        - Surveillance temps réel
-        - Avec GPU disponible
-        """)
-    
-    with col_use3:
-        st.markdown("#### 🎯 Précision Maximale")
-        st.info("**Gagnant: EfficientNet**")
-        st.markdown("""
-        **Pourquoi?**
-        - 98.06% val accuracy
-        - Seulement 45 erreurs
-        - Bon équilibre
-        
-        **Idéal pour:**
-        - Applications critiques
-        - Validation nécessaire
-        - Cloud deployment
-        - Moins d'erreurs critiques
-        """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 💡 Recommandations Finales")
-    
-    rec_col1, rec_col2 = st.columns([2, 1])
-    
-    with rec_col1:
-        st.markdown("""
-        **Pour FindSpot (cette application):**
-        
-        Nous avons choisi **MobileNetV3-Small** comme modèle principal car:
-        
-        1. ✅ **Meilleur test accuracy (97.79%)** - Performance réelle optimale
-        2. ✅ **Le plus léger (2.54 MB)** - Déploiement facile sur Streamlit Cloud
-        3. ✅ **Vitesse suffisante (56 FPS)** - Largement assez pour notre usage
-        4. ✅ **Accessible partout** - Fonctionne même sur appareils limités
-        5. ✅ **Trade-off optimal** - Meilleur équilibre pour une web app
-        
-        **ResNet18** serait meilleur pour un système avec GPU dédié.
-        
-        **EfficientNet** serait meilleur si la précision maximale était critique.
-        """)
-    
-    with rec_col2:
-        st.markdown("#### 📊 Résumé")
-        st.metric("Modèles testés", "3")
-        st.metric("Gagnant test acc", "MobileNetV3")
-        st.metric("Gagnant val acc", "EfficientNet")  
-        st.metric("Gagnant vitesse", "ResNet18")
-        st.metric("Choix déployé", "MobileNetV3")
-    
-    st.markdown("---")
-    
-    # Technologies utilisées
-    st.markdown("## 🛠️ Technologies Utilisées")
-    
-    col_tech1, col_tech2, col_tech3 = st.columns(3)
-    
-    with col_tech1:
-        st.markdown("""
-        **Machine Learning:**
-        - PyTorch
-        - torchvision
-        - MobileNetV3
-        - EfficientNet
-        - ResNet
-        """)
-    
-    with col_tech2:
-        st.markdown("""
-        **Visualisation:**
-        - Streamlit
-        - Matplotlib
-        - Seaborn
-        - PIL/Pillow
-        """)
-    
-    with col_tech3:
-        st.markdown("""
-        **Dataset:**
-        - Action-Camera Parking Dataset
-        - GoPro Hero 6
-        - 293 images annotées
-        - Vue aérienne (~10m)
-        - Annotations ROI (JSON)
-        """)
-    
-    st.markdown("---")
-    
-    # Contact et liens
-    st.markdown("## 📞 Contact & Liens")
-    
-    col_contact1, col_contact2 = st.columns(2)
-    
-    with col_contact1:
-        st.markdown("""
-        **GitHub du Projet:**
-        - Repository: [flegare07/GIF-4101](https://github.com/flegare07/GIF-4101)
-        - Créateur: [@42edelweiss](https://github.com/42edelweiss)
-        
-        **Application:**
-        - URL: https://findspot.streamlit.app
-        - Déployé sur: Streamlit Cloud
-        """)
-    
-    with col_contact2:
-        st.markdown("""
-        **Cours:**
-        - GIF-4101 - Introduction à l'Apprentissage Automatique
-        - Université Laval
-        - Automne 2025
-        
-        **Dataset:**
-        - Action-Camera Parking Dataset
-        - Source: [Martin Marek (2021)](https://github.com/martin-marek/parking-space-occupancy)
-        - arXiv:2107.12207
-        
-        **Remerciements:**
-        - Professeur et assistants du cours
-        - Martin Marek (dataset creator)
-        - Communauté Streamlit
-        """)
-    
-    st.markdown("---")
-    
-    # Footer
-    st.markdown("""
-    <div style='text-align: center; padding: 20px; background-color: #f0f0f0; border-radius: 10px;'>
-        <h3>🅿️ FindSpot</h3>
-        <p><strong>Développé avec ❤️ par Salem N. Nyisingize et l'équipe</strong></p>
-        <p>GIF-4101 | Université Laval | Automne 2025</p>
-        <p style='font-size: 0.9em; color: gray;'>
-            Powered by PyTorch • Streamlit • MobileNetV3 • EfficientNet
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("**EfficientNet-B0** - 98.06% val acc! 🏆")
 
 if __name__ == "__main__":
     main()
